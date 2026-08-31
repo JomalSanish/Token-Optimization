@@ -1,0 +1,8 @@
+.specify
+.pytest_cache
+.venv
+specs
+backend/venv/
+backend/.venv/
+venv/
+.venv/

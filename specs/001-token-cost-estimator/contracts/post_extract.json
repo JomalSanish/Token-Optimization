@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "POST /extract API Contract",
+  "description": "JSON schema for the /extract endpoint requests and responses.",
+  "type": "object",
+  "required": ["request", "response"],
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["project_description", "document_summaries", "provider", "model_id", "api_key"],
+      "properties": {
+        "project_description": { "type": "string", "minLength": 1 },
+        "document_summaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["filename", "page_count", "summary"],
+            "properties": {
+              "filename": { "type": "string" },
+              "page_count": { "type": "integer", "minimum": 1 },
+              "summary": { "type": "string" }
+            }
+          }
+        },
+        "provider": { "type": "string", "enum": ["openai", "google", "anthropic"] },
+        "model_id": { "type": "string" },
+        "api_key": { "type": "string", "minLength": 1 }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["phases", "extraction_notes"],
+      "properties": {
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "phase", "agent_role", "base_input_tokens", "context_input_tokens",
+              "cacheable_fraction", "tool_call_tokens", "output_tokens", "estimated_calls",
+              "confidence", "source"
+            ],
+            "properties": {
+              "phase": { "type": "string" },
+              "agent_role": { "type": "string" },
+              "base_input_tokens": { "type": "integer", "minimum": 0 },
+              "context_input_tokens": { "type": "integer", "minimum": 0 },
+              "cacheable_fraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "tool_call_tokens": { "type": "integer", "minimum": 0 },
+              "output_tokens": { "type": "integer", "minimum": 0 },
+              "estimated_calls": { "type": "integer", "minimum": 1 },
+              "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+              "source": { "type": "string", "const": "llm_extracted" }
+            }
+          }
+        },
+        "extraction_notes": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "POST /estimate API Contract",
+  "description": "JSON schema for the /estimate endpoint requests and responses.",
+  "type": "object",
+  "required": ["request", "response"],
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["phases", "ams_config"],
+      "properties": {
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "phase", "agent_role", "base_input_tokens", "context_input_tokens",
+              "cacheable_fraction", "tool_call_tokens", "output_tokens", "estimated_calls",
+              "assigned_model_id", "assigned_provider", "source"
+            ],
+            "properties": {
+              "phase": { "type": "string" },
+              "agent_role": { "type": "string" },
+              "base_input_tokens": { "type": "integer", "minimum": 0 },
+              "context_input_tokens": { "type": "integer", "minimum": 0 },
+              "cacheable_fraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "tool_call_tokens": { "type": "integer", "minimum": 0 },
+              "output_tokens": { "type": "integer", "minimum": 0 },
+              "estimated_calls": { "type": "integer", "minimum": 1 },
+              "assigned_model_id": { "type": "string" },
+              "assigned_provider": { "type": "string" },
+              "source": { "type": "string", "enum": ["llm_extracted", "user_edited"] }
+            }
+          }
+        },
+        "ams_config": {
+          "type": "object",
+          "required": ["runs_per_year", "annual_growth_rate", "horizon_years"],
+          "properties": {
+            "runs_per_year": { "type": "integer", "minimum": 1 },
+            "annual_growth_rate": { "type": "number", "minimum": 0.0 },
+            "horizon_years": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["pricing_snapshot", "phase_results", "project_total_cost", "ams_multi_year_total_cost"],
+      "properties": {
+        "pricing_snapshot": {
+          "type": "object",
+          "required": ["resolved_at", "models"],
+          "properties": {
+            "resolved_at": { "type": "string", "format": "date-time" },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["model_id", "provider", "pricing", "pricing_version", "effective_from"],
+                "properties": {
+                  "model_id": { "type": "string" },
+                  "provider": { "type": "string" },
+                  "pricing": {
+                    "type": "object",
+                    "required": ["input_per_1m", "output_per_1m", "cached_input_per_1m", "batch_input_per_1m", "batch_output_per_1m"],
+                    "properties": {
+                      "input_per_1m": { "type": "number" },
+                      "output_per_1m": { "type": "number" },
+                      "cached_input_per_1m": { "type": "number" },
+                      "batch_input_per_1m": { "type": "number" },
+                      "batch_output_per_1m": { "type": "number" }
+                    }
+                  },
+                  "pricing_version": { "type": "integer" },
+                  "effective_from": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "phase_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "phase", "effective_input_tokens", "cacheable_input_tokens",
+              "output_tokens", "input_cost", "output_cost", "phase_cost",
+              "ams_classified", "annualized"
+            ],
+            "properties": {
+              "phase": { "type": "string" },
+              "effective_input_tokens": { "type": "integer", "minimum": 0 },
+              "cacheable_input_tokens": { "type": "integer", "minimum": 0 },
+              "output_tokens": { "type": "integer", "minimum": 0 },
+              "input_cost": { "type": "number", "minimum": 0.0 },
+              "output_cost": { "type": "number", "minimum": 0.0 },
+              "phase_cost": { "type": "number", "minimum": 0.0 },
+              "ams_classified": { "type": "boolean" },
+              "annualized": {
+                "type": "object",
+                "additionalProperties": { "type": "number" }
+              }
+            }
+          }
+        },
+        "project_total_cost": { "type": "number", "minimum": 0.0 },
+        "ams_multi_year_total_cost": { "type": "number", "minimum": 0.0 }
+      }
+    }
+  }
+}

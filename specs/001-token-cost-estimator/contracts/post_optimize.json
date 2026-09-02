@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "POST /optimize API Contract",
+  "description": "JSON schema for the /optimize endpoint requests and responses.",
+  "type": "object",
+  "required": ["request", "response"],
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["pricing_snapshot", "phase_results", "phases"],
+      "properties": {
+        "pricing_snapshot": {
+          "type": "object",
+          "required": ["resolved_at", "models"]
+        },
+        "phase_results": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["phase", "agent_role", "base_input_tokens", "context_input_tokens", "cacheable_fraction", "tool_call_tokens", "output_tokens", "estimated_calls", "assigned_model_id", "assigned_provider", "source"]
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["phase_optimizations", "total_savings_amount", "total_savings_percentage", "advisory_recommendations"],
+      "properties": {
+        "phase_optimizations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "phase", "triggered_rules", "combined_input_reduction", "combined_output_reduction",
+              "optimized_phase_cost", "savings_amount", "savings_percentage"
+            ],
+            "properties": {
+              "phase": { "type": "string" },
+              "triggered_rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["rule_id", "version", "pool", "reduction_applied"],
+                  "properties": {
+                    "rule_id": { "type": "string" },
+                    "version": { "type": "integer" },
+                    "pool": { "type": "string", "enum": ["input", "output", "both"] },
+                    "reduction_applied": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+                  }
+                }
+              },
+              "combined_input_reduction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "combined_output_reduction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "optimized_phase_cost": { "type": "number", "minimum": 0.0 },
+              "savings_amount": { "type": "number", "minimum": 0.0 },
+              "savings_percentage": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+            }
+          }
+        },
+        "total_savings_amount": { "type": "number", "minimum": 0.0 },
+        "total_savings_percentage": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "advisory_recommendations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "phase", "description", "note"],
+            "properties": {
+              "category": { "type": "string", "enum": ["agentic_coding_tools", "batch_apis", "other"] },
+              "phase": { "type": "string" },
+              "description": { "type": "string" },
+              "note": { "type": "string", "const": "adoption-required, not included in totals above" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

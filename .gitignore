@@ -1,8 +1,30 @@
-.specify
-.pytest_cache
-.venv
-specs
-backend/venv/
-backend/.venv/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# Virtual environments
 venv/
 .venv/
+env/
+.env/
+backend/venv/
+backend/.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Node/Frontend
+node_modules/
+
+# OS Files
+.DS_Store
+
+# Project specific
+.specify
+specs/
+backend/.env
+.env

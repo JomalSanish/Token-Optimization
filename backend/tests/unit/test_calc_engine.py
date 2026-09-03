@@ -1,6 +1,7 @@
 import pytest
 from decimal import Decimal
 from src.calc_engine import (
+    to_decimal,
     calculate_effective_input_tokens,
     calculate_cacheable_split,
     calculate_phase_raw_cost,
@@ -24,6 +25,29 @@ def test_cacheable_split():
     # non-cacheable = 1600 - 200 = 1400
     assert res["cacheable_input_tokens"] == 200
     assert res["non_cacheable_input_tokens"] == 1400
+
+def test_to_decimal_none_defaults_to_zero():
+    # to_decimal(None) must return Decimal("0.0") rather than raising
+    assert to_decimal(None) == Decimal("0.0")
+
+def test_cacheable_split_clamps_negative_cacheable():
+    # Negative cacheable_fraction drives the raw cacheable count negative;
+    # the function must clamp it to 0 rather than returning a negative token count.
+    # Note: non_cacheable is computed as (effective - raw_cacheable) BEFORE the
+    # clamp is applied, so a negative raw cacheable count (-250) inflates it:
+    # non_cacheable = 1600 - (-250) = 1850.
+    res = calculate_cacheable_split(1600, 500, -0.5)
+    assert res["cacheable_input_tokens"] == 0
+    assert res["non_cacheable_input_tokens"] == 1850
+
+def test_cacheable_split_clamps_negative_non_cacheable():
+    # effective_input_tokens smaller than the cacheable count drives
+    # non_cacheable negative; the function must clamp it to 0.
+    res = calculate_cacheable_split(100, 500, 0.5)
+    # cacheable = round(500 * 0.5) = 250
+    assert res["cacheable_input_tokens"] == 250
+    # non_cacheable = 100 - 250 = -150 -> clamped to 0
+    assert res["non_cacheable_input_tokens"] == 0
 
 def test_phase_raw_cost():
     pricing = {

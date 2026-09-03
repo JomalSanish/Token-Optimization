@@ -1,4 +1,4 @@
-﻿# Tasks: Token Optimizer v2 — Extensible Provider Dispatch, User Dashboard & Model Routing
+# Tasks: Token Optimizer v2 — Extensible Provider Dispatch, User Dashboard & Model Routing
 
 **Branch**: `002-token-optimizer-v2` | **Generated**: 2026-09-03
 **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md)
@@ -15,10 +15,10 @@
 
 **Purpose**: Scaffolding and configuration that everything else builds on.
 
-- [ ] T001 Scaffold Vite + React 18 project in `frontend/` using `npm create vite@latest . -- --template react` (replaces existing HTML frontend in-place); as part of this task, remove `frontend/styles.css`, `frontend/admin.html`, `frontend/index.html`, `frontend/src/app.js`, and `frontend/src/admin.js` so no orphaned legacy assets remain alongside the new scaffold — verify the working tree is clean (`git status`) before proceeding to T002
-- [ ] T002 Install React Router v6 dependency and verify `frontend/package.json` and `frontend/vite.config.js` are correct
-- [ ] T003 [P] Configure Vite dev proxy to `http://localhost:8000` so frontend API calls reach the backend during development in `frontend/vite.config.js`
-- [ ] T004 [P] Verify Python environment and `backend/requirements.txt` still resolves cleanly (no new backend dependencies required)
+- [X] T001 Scaffold Vite + React 18 project in `frontend/` using `npm create vite@latest . -- --template react` (replaces existing HTML frontend in-place); as part of this task, remove `frontend/styles.css`, `frontend/admin.html`, `frontend/index.html`, `frontend/src/app.js`, and `frontend/src/admin.js` so no orphaned legacy assets remain alongside the new scaffold — verify the working tree is clean (`git status`) before proceeding to T002
+- [X] T002 Install React Router v6 dependency and verify `frontend/package.json` and `frontend/vite.config.js` are correct
+- [X] T003 [P] Configure Vite dev proxy to `http://localhost:8000` so frontend API calls reach the backend during development in `frontend/vite.config.js`
+- [X] T004 [P] Verify Python environment and `backend/requirements.txt` still resolves cleanly (no new backend dependencies required)
 
 **Checkpoint**: Frontend scaffold boots at `http://localhost:5173`; backend boots unchanged at `http://localhost:8000`.
 
@@ -32,17 +32,17 @@ No endpoint or seed work begins until this phase is complete.
 > ⚠️ **CRITICAL**: Phases 3–5 (backend endpoints, DB reset, integration tests) MUST NOT begin
 > until T005–T015 are complete. The seed script in Phase 3 will fail against an incomplete schema.
 
-- [ ] T005 Extend `backend/src/schemas.py` — add `AdapterTemplate` sub-schema (six required string fields: `request_url`, `http_method`, `header_template`, `body_template`, `response_text_path`, `error_message_path`)
-- [ ] T006 Extend `backend/src/schemas.py` — extend `ProviderIn`/`ProviderOut` with `implementation_type` (enum: `native | openai_compatible | template`), conditionally required `native_key`, `base_url`, and `adapter_template` fields; add pydantic `model_validator` enforcing which sub-fields are required per type
-- [ ] T007 Extend `backend/src/schemas.py` — add four required capability tag fields to `ModelIn`/`ModelOut`: `complexity_tier`, `reasoning_complexity`, `output_quality` (str enums), `primary_use` (list[str] enum); all required with no default
-- [ ] T008 Extend `backend/src/schemas.py` — add three required capability requirement fields to `PhaseIn`/`PhaseOut`: `default_complexity_tier`, `default_reasoning_complexity`, `default_output_quality`; all required with no default
-- [ ] T009 Create `backend/src/validators.py` — implement `validate_provider_url(url: str) -> None` that rejects non-HTTPS schemes and resolves hostname via `socket.getaddrinfo`, rejecting private/loopback/link-local address ranges using `ipaddress` stdlib; raises `ValueError` with a descriptive message on any violation
-- [ ] T010 Extend `backend/src/llm_adapters.py` — add `LLMAdapter.call_openai_compatible(base_url, model_id, api_key, system_prompt, user_prompt)` as a parameterized wrapper sharing the same request/response shape as `call_openai` but with a configurable base URL
-- [ ] T011 Extend `backend/src/llm_adapters.py` — add `_substitute(template_str, substitutions)` helper that replaces `{model_id}`, `{api_key}`, `{system_prompt}`, `{user_prompt}` via `str.format_map` (static substitution only, no eval/exec)
-- [ ] T012 Extend `backend/src/llm_adapters.py` — add `_extract_path(data, dot_path)` helper that traverses a parsed JSON dict via dot-path string with `[n]` array-index support (e.g. `choices[0].message.content`)
-- [ ] T013 Extend `backend/src/llm_adapters.py` — add `_dispatch_template(adapter_template, model_id, api_key, system_prompt, user_prompt)` async function using `_substitute` + `_extract_path` + `httpx.AsyncClient`; map 401/429 through, all other non-2xx to 502
-- [ ] T014 Extend `backend/src/llm_adapters.py` — rewrite `dispatch_llm_call` as a three-way switch on `provider_doc["implementation_type"]`: `native` → look up key in `NATIVE_REGISTRY` dict and call matching function; `openai_compatible` → `call_openai_compatible` with stored `base_url`; `template` → `_dispatch_template` with stored `adapter_template`
-- [ ] T015 Create `backend/src/routing.py` — implement pure function `best_fit_model(phase_doc: dict, active_models: list[dict]) -> dict` using ordinal ranking (simple=0…frontier=3, direct=0…deep-reasoning=3, draft=0…expert-grade=3); Pass 1: cheapest model meeting/exceeding all three requirements; Pass 2 fallback: smallest sum of absolute ordinal distances, tie-broken by blended rate then `model_id` lexicographic order
+- [X] T005 Extend `backend/src/schemas.py` — add `AdapterTemplate` sub-schema (six required string fields: `request_url`, `http_method`, `header_template`, `body_template`, `response_text_path`, `error_message_path`)
+- [X] T006 Extend `backend/src/schemas.py` — extend `ProviderIn`/`ProviderOut` with `implementation_type` (enum: `native | openai_compatible | template`), conditionally required `native_key`, `base_url`, and `adapter_template` fields; add pydantic `model_validator` enforcing which sub-fields are required per type
+- [X] T007 Extend `backend/src/schemas.py` — add four required capability tag fields to `ModelIn`/`ModelOut`: `complexity_tier`, `reasoning_complexity`, `output_quality` (str enums), `primary_use` (list[str] enum); all required with no default
+- [X] T008 Extend `backend/src/schemas.py` — add three required capability requirement fields to `PhaseIn`/`PhaseOut`: `default_complexity_tier`, `default_reasoning_complexity`, `default_output_quality`; all required with no default
+- [X] T009 Create `backend/src/validators.py` — implement `validate_provider_url(url: str) -> None` that rejects non-HTTPS schemes and resolves hostname via `socket.getaddrinfo`, rejecting private/loopback/link-local address ranges using `ipaddress` stdlib; raises `ValueError` with a descriptive message on any violation
+- [X] T010 Extend `backend/src/llm_adapters.py` — add `LLMAdapter.call_openai_compatible(base_url, model_id, api_key, system_prompt, user_prompt)` as a parameterized wrapper sharing the same request/response shape as `call_openai` but with a configurable base URL
+- [X] T011 Extend `backend/src/llm_adapters.py` — add `_substitute(template_str, substitutions)` helper that replaces `{model_id}`, `{api_key}`, `{system_prompt}`, `{user_prompt}` via `str.format_map` (static substitution only, no eval/exec)
+- [X] T012 Extend `backend/src/llm_adapters.py` — add `_extract_path(data, dot_path)` helper that traverses a parsed JSON dict via dot-path string with `[n]` array-index support (e.g. `choices[0].message.content`)
+- [X] T013 Extend `backend/src/llm_adapters.py` — add `_dispatch_template(adapter_template, model_id, api_key, system_prompt, user_prompt)` async function using `_substitute` + `_extract_path` + `httpx.AsyncClient`; map 401/429 through, all other non-2xx to 502
+- [X] T014 Extend `backend/src/llm_adapters.py` — rewrite `dispatch_llm_call` as a three-way switch on `provider_doc["implementation_type"]`: `native` → look up key in `NATIVE_REGISTRY` dict and call matching function; `openai_compatible` → `call_openai_compatible` with stored `base_url`; `template` → `_dispatch_template` with stored `adapter_template`
+- [X] T015 Create `backend/src/routing.py` — implement pure function `best_fit_model(phase_doc: dict, active_models: list[dict]) -> dict` using ordinal ranking (simple=0…frontier=3, direct=0…deep-reasoning=3, draft=0…expert-grade=3); Pass 1: cheapest model meeting/exceeding all three requirements; Pass 2 fallback: smallest sum of absolute ordinal distances, tie-broken by blended rate then `model_id` lexicographic order
 
 **Checkpoint**: `backend/src/schemas.py`, `validators.py`, `llm_adapters.py`, `routing.py` all present and importable with no syntax errors.
 

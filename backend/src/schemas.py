@@ -19,6 +19,15 @@ class ModelPricing(BaseModel):
     
     model_config = common_config
 
+# --- T007: Model capability tag enums (fixed sets — no free-text allowed) ---
+COMPLEXITY_TIER_VALUES = {"simple", "moderate", "complex", "frontier"}
+REASONING_COMPLEXITY_VALUES = {"direct", "single-step", "multi-step", "deep-reasoning"}
+OUTPUT_QUALITY_VALUES = {"draft", "standard", "high-fidelity", "expert-grade"}
+PRIMARY_USE_VALUES = {
+    "extraction", "classification", "summarization", "code-generation",
+    "reasoning", "instruction-following", "long-context", "multimodal"
+}
+
 class ModelIn(BaseModel):
     provider: str
     model_id: str
@@ -27,8 +36,41 @@ class ModelIn(BaseModel):
     context_window: int
     capabilities: List[str]
     active: bool = True
-    
+
+    # --- NEW (T007): four required capability tags; all required, no defaults ---
+    complexity_tier: str
+    reasoning_complexity: str
+    output_quality: str
+    primary_use: List[str]  # non-empty list of PRIMARY_USE_VALUES
+
     model_config = common_config
+
+    @model_validator(mode="after")
+    def validate_capability_tags(self) -> "ModelIn":
+        if self.complexity_tier not in COMPLEXITY_TIER_VALUES:
+            raise ValueError(
+                f"complexity_tier must be one of {sorted(COMPLEXITY_TIER_VALUES)}, "
+                f"got '{self.complexity_tier}'"
+            )
+        if self.reasoning_complexity not in REASONING_COMPLEXITY_VALUES:
+            raise ValueError(
+                f"reasoning_complexity must be one of {sorted(REASONING_COMPLEXITY_VALUES)}, "
+                f"got '{self.reasoning_complexity}'"
+            )
+        if self.output_quality not in OUTPUT_QUALITY_VALUES:
+            raise ValueError(
+                f"output_quality must be one of {sorted(OUTPUT_QUALITY_VALUES)}, "
+                f"got '{self.output_quality}'"
+            )
+        if not self.primary_use:
+            raise ValueError("primary_use must contain at least one value")
+        invalid = set(self.primary_use) - PRIMARY_USE_VALUES
+        if invalid:
+            raise ValueError(
+                f"primary_use contains invalid values: {sorted(invalid)}. "
+                f"Allowed: {sorted(PRIMARY_USE_VALUES)}"
+            )
+        return self
 
 class ModelOut(ModelIn):
     pricing_version: int = 1
@@ -38,19 +80,114 @@ class ModelOut(ModelIn):
     
     model_config = common_config
 
+
+# --- T005: AdapterTemplate sub-schema (used when implementation_type = "template") ---
+class AdapterTemplate(BaseModel):
+    """Declarative adapter configuration for novel-schema providers.
+
+    All six fields are required. No code, scripts, or expressions may appear
+    in any field — the generic dispatcher treats all values as static strings
+    with only the four allowed placeholder tokens: {model_id}, {api_key},
+    {system_prompt}, {user_prompt}.
+    """
+    request_url: str        # HTTPS URL, SSRF-validated at save time
+    http_method: str        # e.g. "POST"
+    header_template: Dict[str, str]   # header name → static value (may use {api_key})
+    body_template: Dict[str, Any]     # JSON structure with optional placeholder refs
+    response_text_path: str           # dot-path with [n] index support
+    error_message_path: str           # dot-path to provider's error message field
+
+    model_config = common_config
+
+
+# --- T006: Provider implementation type enum ---
+IMPLEMENTATION_TYPE_VALUES = {"native", "openai_compatible", "template"}
+# Fixed backend-registered native implementation keys (developer-shipped only)
+NATIVE_REGISTRY_KEYS = {"openai", "anthropic", "google"}
+
 # 2. Provider Schemas
 class ProviderIn(BaseModel):
+    """Provider record schema.
+
+    implementation_type is required. Conditional fields are validated by
+    model_validator depending on the chosen type:
+      - native: native_key must be present and in NATIVE_REGISTRY_KEYS
+      - openai_compatible: base_url must be present (SSRF-validated at route layer)
+      - template: adapter_template must be fully populated (SSRF-validated at route layer)
+    """
     provider_id: str
     display_name: str
     active: bool = True
-    
+
+    # --- NEW (T006) ---
+    implementation_type: str  # required; one of IMPLEMENTATION_TYPE_VALUES
+
+    # Type-specific fields (conditionally required — enforced by model_validator below)
+    native_key: Optional[str] = None          # required when implementation_type = "native"
+    base_url: Optional[str] = None            # required when implementation_type = "openai_compatible"
+    adapter_template: Optional[AdapterTemplate] = None  # required when type = "template"
+
     model_config = common_config
 
+    @model_validator(mode="after")
+    def validate_implementation_type(self) -> "ProviderIn":
+        impl = self.implementation_type
+        if impl not in IMPLEMENTATION_TYPE_VALUES:
+            raise ValueError(
+                f"implementation_type must be one of {sorted(IMPLEMENTATION_TYPE_VALUES)}, "
+                f"got '{impl}'"
+            )
+        if impl == "native":
+            if not self.native_key:
+                raise ValueError(
+                    "native_key is required when implementation_type is 'native'"
+                )
+            if self.native_key not in NATIVE_REGISTRY_KEYS:
+                raise ValueError(
+                    f"native_key '{self.native_key}' is not a registered native implementation. "
+                    f"Valid keys: {sorted(NATIVE_REGISTRY_KEYS)}"
+                )
+        elif impl == "openai_compatible":
+            if not self.base_url:
+                raise ValueError(
+                    "base_url is required when implementation_type is 'openai_compatible'"
+                )
+        elif impl == "template":
+            if not self.adapter_template:
+                raise ValueError(
+                    "adapter_template is required when implementation_type is 'template'"
+                )
+        return self
+
 class ProviderOut(ProviderIn):
+    """Full provider document — used by admin routes only.
+
+    Includes native_key and adapter_template internals. MUST NOT be used
+    as the response_model for any public (non-admin) endpoint.
+    """
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = common_config
+
+
+# --- T024A: Public-safe provider view for GET /providers ---
+class ProviderPublicOut(BaseModel):
+    """Public provider view — excludes native_key and adapter_template.
+
+    Used as response_model for GET /providers so internal dispatch details
+    never leave the backend via the public endpoint.
+    """
+    provider_id: str
+    display_name: str
+    active: bool
+    implementation_type: str
+    base_url: Optional[str] = None  # present only for openai_compatible providers
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = common_config
+
 
 # 3. PricingHistory Schema
 class PricingHistoryOut(BaseModel):
@@ -107,6 +244,14 @@ class OptimizerRuleOut(OptimizerRuleIn):
     
     model_config = common_config
 
+
+# --- T008: Phase capability requirement enums (same values as model tags) ---
+PHASE_REQUIREMENT_FIELDS = {
+    "default_complexity_tier": COMPLEXITY_TIER_VALUES,
+    "default_reasoning_complexity": REASONING_COMPLEXITY_VALUES,
+    "default_output_quality": OUTPUT_QUALITY_VALUES,
+}
+
 # 5. Phase Schema
 class PhaseIn(BaseModel):
     phase_id: str
@@ -115,10 +260,58 @@ class PhaseIn(BaseModel):
     default_agent_role: str
     default_cacheable_fraction: Decimal
     ams_classified: bool
-    
+
+    # --- NEW (T008): three required default capability requirement fields ---
+    default_complexity_tier: str       # required; same enum as model.complexity_tier
+    default_reasoning_complexity: str  # required; same enum as model.reasoning_complexity
+    default_output_quality: str        # required; same enum as model.output_quality
+
     model_config = common_config
 
+    @model_validator(mode="after")
+    def validate_phase_requirements(self) -> "PhaseIn":
+        checks = {
+            "default_complexity_tier": (self.default_complexity_tier, COMPLEXITY_TIER_VALUES),
+            "default_reasoning_complexity": (self.default_reasoning_complexity, REASONING_COMPLEXITY_VALUES),
+            "default_output_quality": (self.default_output_quality, OUTPUT_QUALITY_VALUES),
+        }
+        for field_name, (value, allowed) in checks.items():
+            if value not in allowed:
+                raise ValueError(
+                    f"{field_name} must be one of {sorted(allowed)}, got '{value}'"
+                )
+        return self
+
 class PhaseOut(PhaseIn):
+    model_config = common_config
+
+
+# --- T032: Route-model request/response schemas ---
+class RouteModelRequest(BaseModel):
+    """Request body for POST /route-model."""
+    phase_id: str
+    provider_id: str
+
+    model_config = common_config
+
+class RouteModelResponse(BaseModel):
+    """Response for POST /route-model.
+
+    match_type values:
+      "exact"   — model meets or exceeds all three requirement dimensions
+      "nearest" — fallback; no model fully met requirements; closest returned
+      "none"    — provider has zero active models (valid, not an error)
+
+    All model-specific fields are None when match_type is "none".
+    """
+    phase_id: str
+    provider_id: str
+    model_id: Optional[str] = None
+    display_name: Optional[str] = None
+    match_type: str  # "exact" | "nearest" | "none"
+    ordinal_distance: Optional[int] = None
+    blended_rate: Optional[Decimal] = None
+
     model_config = common_config
 
 

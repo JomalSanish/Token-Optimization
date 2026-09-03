@@ -177,12 +177,20 @@ curl -X POST http://localhost:8000/route-model \
   -d '{"phase_id":"requirement","provider_id":"openai"}'
 # → 200 with model_id, match_type ("exact" or "nearest"), ordinal_distance, blended_rate
 
-# POST /route-model — provider with no active models → 404
+# POST /route-model — real provider with zero active models → 200, match_type: "none"
 curl -X POST http://localhost:8000/route-model \
   -H "X-App-Secret: $APP_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"phase_id":"requirement","provider_id":"groq"}'
-# → 404 (groq has no models seeded yet)
+# → 200 with match_type: "none", model_id: null (groq is seeded as a provider but has no
+#   models seeded yet — this is a valid state, not an error)
+
+# POST /route-model — provider_id that doesn't exist at all → 404
+curl -X POST http://localhost:8000/route-model \
+  -H "X-App-Secret: $APP_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"phase_id":"requirement","provider_id":"does-not-exist"}'
+# → 404
 ```
 
 ---

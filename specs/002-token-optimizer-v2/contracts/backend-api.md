@@ -44,8 +44,11 @@ and /project.
 ```
 
 Note: `native_key` and `adapter_template` fields are NOT returned on this public endpoint —
-these are internal dispatch details. The response includes only `provider_id`, `display_name`,
-`active`, `implementation_type`, and (for `openai_compatible`) `base_url` for display purposes.
+these are internal dispatch details. This is enforced at the schema layer: the endpoint's
+`response_model` is `ProviderPublicOut` (a distinct schema from the admin-facing `ProviderOut`),
+not `ProviderOut` with fields manually stripped. The response includes only `provider_id`,
+`display_name`, `active`, `implementation_type`, and (for `openai_compatible`) `base_url` for
+display purposes.
 
 ---
 
@@ -106,7 +109,12 @@ Returns the best-fit active model for a given phase and provider, per the routin
 }
 ```
 
-**Response 200**:
+**Response headers**: `Cache-Control: no-store` on every response from this endpoint (success and
+error alike). Routing results are explicitly non-reproducible across admin catalog edits (see
+constitution Principle IX) — a CDN or browser cache would silently serve a stale routing decision
+otherwise.
+
+**Response 200 (match found)**:
 ```json
 {
   "phase_id": "design",
@@ -119,13 +127,32 @@ Returns the best-fit active model for a given phase and provider, per the routin
 }
 ```
 
-Fields:
-- `match_type`: `"exact"` (model meets or exceeds all three requirements) or
-  `"nearest"` (fallback — no model fully meets requirements).
-- `ordinal_distance`: sum of absolute ordinal distances across all three dimensions (0 for exact).
-- `blended_rate`: `(input_per_1m + output_per_1m) / 2` as a Decimal string.
+**Response 200 (no active models for this provider)**:
+```json
+{
+  "phase_id": "design",
+  "provider_id": "some-provider",
+  "model_id": null,
+  "display_name": null,
+  "match_type": "none",
+  "ordinal_distance": null,
+  "blended_rate": null
+}
+```
+This is a valid, expected outcome — the provider and phase both exist, the provider currently just
+has no active models. It is intentionally a 200, not a 404: a 404 would conflate "this provider
+doesn't exist" with "this provider has nothing active right now," which the frontend needs to
+handle differently (the latter is not a broken request).
 
-**Response 404**: Phase or provider not found, or provider has no active models.
+Fields:
+- `match_type`: `"exact"` (model meets or exceeds all three requirements), `"nearest"` (fallback —
+  no model fully meets requirements), or `"none"` (provider has zero active models).
+- `ordinal_distance`: sum of absolute ordinal distances across all three dimensions (0 for exact,
+  `null` for `"none"`).
+- `blended_rate`: `(input_per_1m + output_per_1m) / 2` as a Decimal string (`null` for `"none"`).
+
+**Response 404**: `phase_id` or `provider_id` does not exist at all. Reserved strictly for
+unknown entities — not for a real provider that happens to have no active models (see above).
 
 ---
 
@@ -190,6 +217,26 @@ Fields:
 - Non-HTTPS `base_url` or `request_url`.
 - `base_url` / `request_url` resolving to a private/loopback/link-local IP.
 - Missing required fields for the chosen `implementation_type`.
+
+---
+
+## NEW: PATCH /admin/providers/{provider_id}
+
+Full provider update, including status changes.
+
+**Auth**: `Authorization: Bearer` required.
+
+**Request body**: any subset of `ProviderIn` fields, including `{"active": false}` to deactivate.
+
+**Response 200**: Updated `ProviderOut`. **Response 404**: provider not found.
+
+Note on pattern: models and optimizer rules expose separate `POST /activate` /
+`POST /deactivate` sub-routes for status changes, but providers use a single `PATCH` with
+`{"active": bool}` instead. This is a deliberate difference, not an oversight: provider status is
+one field among several (`implementation_type`, `base_url`, adapter config) that can change
+together in the same admin form save, whereas model/rule activation is a standalone action
+elsewhere in their UIs. Do not add `POST /admin/providers/{id}/activate` — use `PATCH` for all
+provider field changes including status.
 
 ---
 

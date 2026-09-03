@@ -190,6 +190,11 @@ the user can still select any other active model from any provider.
    the override is preserved and used for all subsequent calculations until the
    user changes it again.
 
+5. **Given** the full model catalog spans multiple providers, **When** the user
+   opens the model picker for any phase, **Then** models are presented grouped by
+   provider (provider name visible as a group header), not as one undifferentiated
+   flat list.
+
 ---
 
 ### User Story 6 — Admin Manages Phases with Capability Requirements (Priority: P3)
@@ -227,8 +232,10 @@ returns valid suggestions against it.
 ### Edge Cases
 
 - What happens when a provider has no active models? The model picker on /project
-  shows an empty list with a message; the routing endpoint returns a clear no-
-  results response (not an error).
+  shows an empty list with a message; the routing endpoint returns HTTP 200 with a
+  structured `match_type: "none"` body (see FR-026) — deliberately not a 404 or any
+  other error status, since "provider configured but temporarily has no active
+  models" is an expected state, not a fault.
 - What happens when the user's browser storage is cleared? All stored keys are
   lost; the user is shown an empty /keys screen and must re-enter them — no server-
   side recovery path exists per the stateless constitution.
@@ -315,7 +322,9 @@ returns valid suggestions against it.
   NOT be enforced by the backend or stored in the database.
 - **FR-018**: The /estimate route MUST offer a model picker per phase that spans the
   full active model catalog across all providers (not limited to the extraction
-  provider), because the estimate calculation requires no API key.
+  provider), because the estimate calculation requires no API key. The picker MUST
+  visually group models by provider (not present as one flat list), so a catalog
+  spanning many providers and models stays navigable.
 - **FR-019**: The /estimate route MUST include a "Suggest model" action per phase that
   calls the routing endpoint and pre-fills the picker; the pre-fill MUST be
   user-overridable.
@@ -337,8 +346,11 @@ returns valid suggestions against it.
   by cheapest cost, then by model_id lexicographically.
 - **FR-025**: The routing endpoint MUST NOT cache its result or treat the response
   as reproducible across admin catalog changes (tags, pricing, active status).
-- **FR-026**: The routing endpoint MUST return a valid result for any phase/provider
-  combination where the provider has at least one active model.
+- **FR-026**: The routing endpoint MUST return a valid HTTP 200 result for any
+  phase/provider combination where both the phase and the provider exist — including
+  a structured `match_type: "none"` response (not an HTTP error) when the provider
+  exists but currently has zero active models. HTTP 404 is reserved for a `phase_id`
+  or `provider_id` that does not exist at all.
 
 **Deterministic Engine (unchanged)**
 

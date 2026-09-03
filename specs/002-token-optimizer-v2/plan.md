@@ -7,9 +7,10 @@
 ## Summary
 
 Extend the Token Optimizer platform into a three-part v2 release:
-1. **Hybrid Provider Dispatch** — four-way dispatch (native openai/anthropic/google, parameterized
-   openai_compatible, and a generic declarative template interpreter) replaces the current
-   string-switch in `dispatch_llm_call`.
+1. **Hybrid Provider Dispatch** — three implementation types (native, openai_compatible, template)
+   replace the current string-switch in `dispatch_llm_call`. The native type internally dispatches
+   to one of three registered functions (openai, anthropic, google) via a `NATIVE_REGISTRY` dict —
+   still a three-way switch on `implementation_type` at the call site, not four separate arms.
 2. **Schema & Admin API Expansion** — model capability tags, provider implementation_type, phase
    default requirements, and phase CRUD admin routes; MongoDB is reset so all new fields are
    required with no defaults.

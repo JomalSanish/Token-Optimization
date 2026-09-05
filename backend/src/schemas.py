@@ -286,6 +286,40 @@ class PhaseOut(PhaseIn):
     model_config = common_config
 
 
+# --- T022 fix: PATCH /admin/phases/{phase_id} is a partial update per the API
+# contract ("Request body: Any subset of mutable phase fields"). phase_id is
+# intentionally NOT a field here so it can never be changed via PATCH — any
+# phase_id sent in the body is silently ignored rather than rejected. All
+# other fields (including sort_order, which IS mutable per the contract) are
+# optional; only fields actually present in the request are applied, via
+# `.model_dump(exclude_unset=True)` at the call site.
+class PhaseUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[int] = None
+    default_agent_role: Optional[str] = None
+    default_cacheable_fraction: Optional[Decimal] = None
+    ams_classified: Optional[bool] = None
+    default_complexity_tier: Optional[str] = None
+    default_reasoning_complexity: Optional[str] = None
+    default_output_quality: Optional[str] = None
+
+    model_config = common_config
+
+    @model_validator(mode="after")
+    def validate_phase_requirements_if_present(self) -> "PhaseUpdate":
+        checks = {
+            "default_complexity_tier": (self.default_complexity_tier, COMPLEXITY_TIER_VALUES),
+            "default_reasoning_complexity": (self.default_reasoning_complexity, REASONING_COMPLEXITY_VALUES),
+            "default_output_quality": (self.default_output_quality, OUTPUT_QUALITY_VALUES),
+        }
+        for field_name, (value, allowed) in checks.items():
+            if value is not None and value not in allowed:
+                raise ValueError(
+                    f"{field_name} must be one of {sorted(allowed)}, got '{value}'"
+                )
+        return self
+
+
 # --- T032: Route-model request/response schemas ---
 class RouteModelRequest(BaseModel):
     """Request body for POST /route-model."""

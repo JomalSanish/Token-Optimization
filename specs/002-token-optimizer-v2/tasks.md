@@ -53,9 +53,9 @@ No endpoint or seed work begins until this phase is complete.
 **Purpose**: Unit tests for T009–T015 before any endpoint wires them up. Tests run with no
 network or DB — all IO is stubbed. These lock down the logic before it is called from endpoints.
 
-- [ ] T016 Create `backend/tests/unit/test_routing.py` — test `best_fit_model` in four cases (no network/DB): (a) exact match returns cheapest qualifying model; (b) no-match fallback when all models are below the requirement on at least one dimension; (c) no-match fallback when all models exceed the requirement; (d) tie-break by cheapest blended rate then lexicographic `model_id`
-- [ ] T017 [P] Create `backend/tests/unit/test_adapters.py` — test `call_openai_compatible` with a stubbed `httpx` transport returning a synthetic OpenAI-shaped response confirming `base_url` parameterization; test `_dispatch_template` with a stub transport returning a synthetic novel-REST-shaped response confirming `response_text_path` extraction; test `_extract_path` for nested dot-path and `[n]` array-index access; test `_substitute` for all four placeholder tokens; confirm no native-provider assumptions leak into the template path
-- [ ] T017A [Constitution: Testing Gates] Run `pytest --cov=src.calc_engine backend/tests/unit/test_calc_engine.py --cov-report=term-missing --cov-fail-under=100` and confirm the constitution's 100% unit-test-coverage gate for the pure calc-engine still passes unchanged after T014/T027's `dispatch_llm_call` signature change; `test_calc_engine.py` itself is not modified by this feature, but this task exists to prove that fact rather than assume it
+- [X] T016 Create `backend/tests/unit/test_routing.py` — test `best_fit_model` in four cases (no network/DB): (a) exact match returns cheapest qualifying model; (b) no-match fallback when all models are below the requirement on at least one dimension; (c) no-match fallback when all models exceed the requirement; (d) tie-break by cheapest blended rate then lexicographic `model_id`
+- [X] T017 [P] Create `backend/tests/unit/test_adapters.py` — test `call_openai_compatible` with a stubbed `httpx` transport returning a synthetic OpenAI-shaped response confirming `base_url` parameterization; test `_dispatch_template` with a stub transport returning a synthetic novel-REST-shaped response confirming `response_text_path` extraction; test `_extract_path` for nested dot-path and `[n]` array-index access; test `_substitute` for all four placeholder tokens; confirm no native-provider assumptions leak into the template path
+- [X] T017A [Constitution: Testing Gates] Run `pytest --cov=src.calc_engine backend/tests/unit/test_calc_engine.py --cov-report=term-missing --cov-fail-under=100` and confirm the constitution's 100% unit-test-coverage gate for the pure calc-engine still passes unchanged after T014/T027's `dispatch_llm_call` signature change; `test_calc_engine.py` itself is not modified by this feature, but this task exists to prove that fact rather than assume it
 
 **Checkpoint**: `pytest tests/unit/` passes including T016 and T017 (all existing `test_calc_engine.py` tests continue to pass unchanged); T017A confirms 100% calc-engine coverage holds.
 
@@ -67,8 +67,8 @@ network or DB — all IO is stubbed. These lock down the logic before it is call
 it depends on the fully-finalized schemas from T005–T008 (Phase 2) — reseeding against a
 still-changing schema would need to be repeated.
 
-- [ ] T018 Extend `backend/src/repository.py` — add `get_active_models_by_provider(provider_id)`, `update_phase(phase_id, update_doc)`, and `set_phase_active_status(phase_id, active)` methods following existing patterns; add `update_provider(provider_id, update_doc)` for full provider edits
-- [ ] T019 Rewrite `backend/scripts/seed.py` to drop-and-recreate all collections before inserting seed data; add `implementation_type`, `native_key`/`base_url` to all four provider seed rows (openai/anthropic/google as `native`, deepseek as `openai_compatible` with `base_url: "https://api.deepseek.com/v1"`); add all four capability tags to every model seed row; add all three default requirement fields to every phase seed row; run `python scripts/seed.py` against the local dev DB and verify no errors
+- [X] T018 Extend `backend/src/repository.py` — add `get_active_models_by_provider(provider_id)`, `update_phase(phase_id, update_doc)`, and `set_phase_active_status(phase_id, active)` methods following existing patterns; add `update_provider(provider_id, update_doc)` for full provider edits
+- [X] T019 Rewrite `backend/scripts/seed.py` to drop-and-recreate all collections before inserting seed data; add `implementation_type`, `native_key`/`base_url` to all four provider seed rows (openai/anthropic/google as `native`, deepseek as `openai_compatible` with `base_url: "https://api.deepseek.com/v1"`); add all four capability tags to every model seed row; add all three default requirement fields to every phase seed row; run `python scripts/seed.py` against the local dev DB and verify no errors
 
 **Checkpoint**: `python backend/scripts/seed.py` runs cleanly; `db.providers.findOne({provider_id:"deepseek"})` returns a document with `implementation_type: "openai_compatible"` and `base_url`; `db.models.findOne()` includes all four capability tags; `db.phases.findOne()` includes all three default requirement fields.
 
@@ -83,9 +83,9 @@ against real seeded phase data without mocking.
 **Independent Test**: `GET /admin/phases` returns all seeded phases with the three new default
 requirement fields; `POST /admin/phases` with a missing requirement field returns 422.
 
-- [ ] T020 [US6] Extend `backend/src/admin_api/routes.py` — add `GET /admin/phases` endpoint that calls `repo.get_phases()` returning `List[PhaseOut]`
-- [ ] T021 [US6] Extend `backend/src/admin_api/routes.py` — add `POST /admin/phases` endpoint validating `PhaseIn` (all three new required fields enforced by Pydantic) and calling `repo.create_phase()`; return 400 on duplicate `phase_id`
-- [ ] T022 [US6] Extend `backend/src/admin_api/routes.py` — add `PATCH /admin/phases/{phase_id}` endpoint calling `repo.update_phase()`; validate updated enum fields; return 404 if phase not found
+- [X] T020 [US6] Extend `backend/src/admin_api/routes.py` — add `GET /admin/phases` endpoint that calls `repo.get_phases()` returning `List[PhaseOut]`
+- [X] T021 [US6] Extend `backend/src/admin_api/routes.py` — add `POST /admin/phases` endpoint validating `PhaseIn` (all three new required fields enforced by Pydantic) and calling `repo.create_phase()`; return 400 on duplicate `phase_id`
+- [X] T022 [US6] Extend `backend/src/admin_api/routes.py` — add `PATCH /admin/phases/{phase_id}` endpoint calling `repo.update_phase()`; validate updated enum fields; return 404 if phase not found
 
 **Checkpoint**: `GET /admin/phases` returns seeded phases; `POST /admin/phases` missing `default_output_quality` returns 422 with field name in error detail; `PATCH /admin/phases/{phase_id}` updates in place.
 

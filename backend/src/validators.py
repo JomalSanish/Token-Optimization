@@ -67,34 +67,43 @@ def validate_provider_url(url: str) -> None:
                 f"address: '{raw_ip}'"
             )
 
-        # Reject any address that is not a globally-routable public unicast address
+        # Reject any address that is not a globally-routable public unicast address.
+        #
+        # IMPORTANT — ordering matters here: Python's ipaddress module classifies
+        # is_private as a superset that also covers loopback, link-local, reserved
+        # (e.g. 240.0.0.0/4), and unspecified (0.0.0.0 / ::) addresses. Only
+        # multicast addresses fall outside is_private. So the narrow, more specific
+        # categories are checked FIRST, with is_private last as the broad catch-all
+        # — otherwise every one of those narrower branches would be unreachable
+        # dead code, and callers would only ever see the generic "private address"
+        # message instead of the more informative specific one.
         if ip.is_loopback:
             raise ValueError(
                 f"Provider URL hostname '{hostname}' resolves to a loopback address "
                 f"({raw_ip}). Loopback addresses are rejected as an SSRF guard."
             )
-        if ip.is_private:
+        if ip.is_unspecified:
             raise ValueError(
-                f"Provider URL hostname '{hostname}' resolves to a private address "
-                f"({raw_ip}). Private IP ranges are rejected as an SSRF guard."
+                f"Provider URL hostname '{hostname}' resolves to an unspecified address "
+                f"({raw_ip}). Unspecified addresses are rejected as an SSRF guard."
             )
         if ip.is_link_local:
             raise ValueError(
                 f"Provider URL hostname '{hostname}' resolves to a link-local address "
                 f"({raw_ip}). Link-local ranges are rejected as an SSRF guard."
             )
-        if ip.is_multicast:
-            raise ValueError(
-                f"Provider URL hostname '{hostname}' resolves to a multicast address "
-                f"({raw_ip}). Multicast addresses are rejected as an SSRF guard."
-            )
         if ip.is_reserved:
             raise ValueError(
                 f"Provider URL hostname '{hostname}' resolves to a reserved address "
                 f"({raw_ip}). Reserved addresses are rejected as an SSRF guard."
             )
-        if ip.is_unspecified:
+        if ip.is_multicast:
             raise ValueError(
-                f"Provider URL hostname '{hostname}' resolves to an unspecified address "
-                f"({raw_ip}). Unspecified addresses are rejected as an SSRF guard."
+                f"Provider URL hostname '{hostname}' resolves to a multicast address "
+                f"({raw_ip}). Multicast addresses are rejected as an SSRF guard."
+            )
+        if ip.is_private:
+            raise ValueError(
+                f"Provider URL hostname '{hostname}' resolves to a private address "
+                f"({raw_ip}). Private IP ranges are rejected as an SSRF guard."
             )

@@ -3,10 +3,12 @@ from src.admin_api.auth import validate_admin_auth
 from src.repository import CatalogRepository
 from src.schemas import (
     ModelIn, ModelOut, ModelPricing, ProviderIn, ProviderOut,
-    OptimizerRuleIn, OptimizerRuleOut, PricingHistoryOut
+    OptimizerRuleIn, OptimizerRuleOut, PricingHistoryOut,
+    PhaseIn, PhaseOut, PhaseUpdate,
 )
 from typing import List, Dict, Any
 from datetime import datetime
+from decimal import Decimal
 
 admin_router = APIRouter(
     prefix="/admin",
@@ -204,5 +206,68 @@ async def deactivate_rule(rule_id: str):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Rule '{rule_id}' not found."
+        )
+    return updated
+
+
+# --- ADMIN PHASES ---
+
+# T020: List all phases, ordered by sort_order (ascending, handled by repo).
+@admin_router.get("/phases", response_model=List[PhaseOut])
+async def get_all_phases():
+    return await repo.get_phases()
+
+
+# T021: Create a new phase.  All three default requirement fields are enforced
+# by PhaseIn's model_validator — Pydantic will return 422 before this handler
+# runs if any required field is missing or contains an invalid enum value.
+# Uses the default 200 status code, matching the API contract ("Response 200:
+# Created phase document") and the convention already used by every other
+# admin create endpoint in this file (/models, /providers, /optimizer-rules).
+@admin_router.post("/phases", response_model=PhaseOut)
+async def create_phase(phase: PhaseIn):
+    existing = await repo.get_phase_by_id(phase.phase_id)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Phase '{phase.phase_id}' already exists."
+        )
+    phase_dict = phase.model_dump()
+    if "default_cacheable_fraction" in phase_dict and isinstance(phase_dict["default_cacheable_fraction"], Decimal):
+        phase_dict["default_cacheable_fraction"] = float(phase_dict["default_cacheable_fraction"])
+    return await repo.create_phase(phase_dict)
+
+
+# T022: Partial update of a phase, per the API contract ("Updates a phase
+# (partial update). phase_id cannot be changed. Request body: Any subset of
+# mutable phase fields"). The request body is a PhaseUpdate — every field is
+# optional, so a caller may PATCH just `{"name": "..."}` or just
+# `{"sort_order": 3}` without resending the rest of the document. Only fields
+# actually present in the request (`exclude_unset=True`) are written, so
+# omitted fields are left untouched rather than being misread as "clear this
+# field". phase_id is not a field on PhaseUpdate at all, so it can never be
+# changed via PATCH regardless of what the caller sends. sort_order IS
+# mutable via PATCH per the contract.
+@admin_router.patch("/phases/{phase_id}", response_model=PhaseOut)
+async def update_phase(phase_id: str, phase: PhaseUpdate):
+    existing = await repo.get_phase_by_id(phase_id)
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Phase '{phase_id}' not found."
+        )
+    mutable_fields = {
+        k: (float(v) if isinstance(v, Decimal) else v)
+        for k, v in phase.model_dump(exclude_unset=True).items()
+    }
+    if not mutable_fields:
+        # Nothing to update — return the existing document unchanged rather
+        # than issuing a no-op DB write.
+        return existing
+    updated = await repo.update_phase(phase_id, mutable_fields)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update phase."
         )
     return updated

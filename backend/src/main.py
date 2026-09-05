@@ -5,7 +5,7 @@ from src.database import connect_to_mongo, close_mongo_connection
 from src.middleware import validate_shared_secret
 from src.repository import CatalogRepository
 from src.admin_api.routes import admin_router
-from src.schemas import ModelOut, OptimizerRuleOut
+from src.schemas import ModelOut, OptimizerRuleOut, ProviderPublicOut
 from pymongo.errors import PyMongoError
 from typing import List, Dict, Any
 import logging
@@ -104,6 +104,63 @@ async def get_active_optimizer_rules():
         )
 
 
+# T025: Public active-provider catalog — uses ProviderPublicOut so native_key
+# and adapter_template internals are stripped at the FastAPI response-model layer.
+@app.get(
+    "/providers",
+    response_model=List[ProviderPublicOut],
+    dependencies=[Depends(validate_shared_secret)],
+    tags=["catalog"]
+)
+async def get_active_providers():
+    """
+    Public, read-only active provider catalog.
+    Returns only fields safe for external consumption; native_key and
+    adapter_template are excluded by the ProviderPublicOut response model.
+    """
+    repo = CatalogRepository()
+    try:
+        return await repo.get_active_providers()
+    except PyMongoError as e:
+        logger.error(f"Database error during active providers fetch: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authoritative configuration database is currently unavailable."
+        )
+
+
+# T026: Models scoped to a single provider.
+@app.get(
+    "/providers/{provider_id}/models",
+    response_model=List[ModelOut],
+    dependencies=[Depends(validate_shared_secret)],
+    tags=["catalog"]
+)
+async def get_provider_models(provider_id: str):
+    """
+    Returns active models for the given provider.
+    Raises 404 if the provider_id is not found in the DB at all.
+    Returns an empty list if the provider exists but has no active models.
+    """
+    repo = CatalogRepository()
+    try:
+        provider = await repo.get_provider_by_id(provider_id)
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Provider '{provider_id}' not found."
+            )
+        return await repo.get_active_models_by_provider(provider_id)
+    except HTTPException:
+        raise
+    except PyMongoError as e:
+        logger.error(f"Database error during provider models fetch: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authoritative configuration database is currently unavailable."
+        )
+
+
 # Import schemas for endpoints
 from src.schemas import (
     ExtractRequest, ExtractResponse, ExtractedPhase,
@@ -171,8 +228,26 @@ async def extract_project_signals(
     )
     
     try:
+        # T027: Fetch the full provider document from DB and pass it to
+        # dispatch_llm_call so the three-way implementation_type switch works
+        # for openai_compatible and template providers (not just native).
+        repo_inner = CatalogRepository()
+        try:
+            provider_doc = await repo_inner.get_provider_by_id(payload.provider)
+        except PyMongoError as e:
+            logger.error(f"Database error during provider lookup for extraction: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authoritative configuration database is currently unavailable."
+            )
+        if not provider_doc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Provider '{payload.provider}' not found or inactive."
+            )
+
         response_text = await dispatch_llm_call(
-            provider=payload.provider,
+            provider_doc=provider_doc,
             model_id=payload.model_id,
             api_key=x_provider_key,
             system_prompt=system_prompt,

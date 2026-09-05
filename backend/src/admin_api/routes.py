@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from src.admin_api.auth import validate_admin_auth
 from src.repository import CatalogRepository
+from src.validators import validate_provider_url
 from src.schemas import (
     ModelIn, ModelOut, ModelPricing, ProviderIn, ProviderOut,
     OptimizerRuleIn, OptimizerRuleOut, PricingHistoryOut,
@@ -116,6 +117,23 @@ async def get_all_providers():
 
 @admin_router.post("/providers", response_model=ProviderOut)
 async def create_provider(provider: ProviderIn):
+    # T023: SSRF-validate base_url / adapter_template.request_url before saving.
+    if provider.implementation_type == "openai_compatible" and provider.base_url:
+        try:
+            validate_provider_url(provider.base_url)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"base_url validation failed: {exc}",
+            )
+    if provider.implementation_type == "template" and provider.adapter_template:
+        try:
+            validate_provider_url(provider.adapter_template.request_url)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"adapter_template.request_url validation failed: {exc}",
+            )
     existing = await repo.get_provider_by_id(provider.provider_id)
     if existing:
         raise HTTPException(
@@ -124,19 +142,40 @@ async def create_provider(provider: ProviderIn):
         )
     return await repo.create_provider(provider.model_dump())
 
+
+# T024: Full provider update — replaces the old active-only PATCH.
+# Accepts a complete ProviderIn body, SSRF-validates any updated URL, and
+# calls repo.update_provider() which stamps updated_at automatically.
 @admin_router.patch("/providers/{provider_id}", response_model=ProviderOut)
-async def update_provider_status(provider_id: str, active: bool):
+async def update_provider(provider_id: str, provider: ProviderIn):
     existing = await repo.get_provider_by_id(provider_id)
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Provider '{provider_id}' not found."
         )
-    updated = await repo.set_provider_active_status(provider_id, active)
+    # SSRF-validate any URL present on the updated payload.
+    if provider.implementation_type == "openai_compatible" and provider.base_url:
+        try:
+            validate_provider_url(provider.base_url)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"base_url validation failed: {exc}",
+            )
+    if provider.implementation_type == "template" and provider.adapter_template:
+        try:
+            validate_provider_url(provider.adapter_template.request_url)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"adapter_template.request_url validation failed: {exc}",
+            )
+    updated = await repo.update_provider(provider_id, provider.model_dump())
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update provider status."
+            detail="Failed to update provider."
         )
     return updated
 

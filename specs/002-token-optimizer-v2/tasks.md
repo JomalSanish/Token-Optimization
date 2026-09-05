@@ -100,15 +100,15 @@ a user with a key can immediately run extraction against it — zero backend cod
 
 ### Backend — Provider Schema & SSRF Validation
 
-- [ ] T023 [US1] Extend `backend/src/admin_api/routes.py` — update `POST /admin/providers` to use the new `ProviderIn` schema (T006); call `validate_provider_url` (T009) from `backend/src/validators.py` on `base_url` before saving; return 422 with descriptive error on SSRF violation or invalid `native_key`
-- [ ] T024 [US1] Extend `backend/src/admin_api/routes.py` — add `PATCH /admin/providers/{provider_id}` endpoint for full provider updates (not just active status); call `validate_provider_url` on any updated URL; return 404 if not found
+- [X] T023 [US1] Extend `backend/src/admin_api/routes.py` — update `POST /admin/providers` to use the new `ProviderIn` schema (T006); call `validate_provider_url` (T009) from `backend/src/validators.py` on `base_url` before saving; return 422 with descriptive error on SSRF violation or invalid `native_key`
+- [X] T024 [US1] Extend `backend/src/admin_api/routes.py` — add `PATCH /admin/providers/{provider_id}` endpoint for full provider updates (not just active status); call `validate_provider_url` on any updated URL; return 404 if not found
 
 ### Backend — Public Endpoints
 
-- [ ] T024A [US1] Add `ProviderPublicOut` schema to `backend/src/schemas.py` — a variant of `ProviderOut` that excludes `native_key` and `adapter_template` (internal dispatch details never meant to leave the backend); include only `provider_id`, `display_name`, `active`, `implementation_type`, `base_url` (present only for `openai_compatible`), `created_at`, `updated_at`
-- [ ] T025 [US1] Extend `backend/src/main.py` — add `GET /providers` endpoint (shared-secret protected) returning active providers using `ProviderPublicOut` as the `response_model`, so `native_key` and `adapter_template` are excluded at the FastAPI response-model layer rather than by convention
-- [ ] T026 [US1] Extend `backend/src/main.py` — add `GET /providers/{provider_id}/models` endpoint (shared-secret protected) calling `repo.get_active_models_by_provider()`; return 404 if provider not found; return empty list if provider has no active models
-- [ ] T027 [US1] Update `backend/src/main.py` `/extract` endpoint — change `dispatch_llm_call` call signature to pass the full provider document (fetched from DB by `provider_id`) instead of the provider name string, enabling the three-way implementation_type switch
+- [X] T024A [US1] Add `ProviderPublicOut` schema to `backend/src/schemas.py` — a variant of `ProviderOut` that excludes `native_key` and `adapter_template` (internal dispatch details never meant to leave the backend); include only `provider_id`, `display_name`, `active`, `implementation_type`, `base_url` (present only for `openai_compatible`), `created_at`, `updated_at`
+- [X] T025 [US1] Extend `backend/src/main.py` — add `GET /providers` endpoint (shared-secret protected) returning active providers using `ProviderPublicOut` as the `response_model`, so `native_key` and `adapter_template` are excluded at the FastAPI response-model layer rather than by convention
+- [X] T026 [US1] Extend `backend/src/main.py` — add `GET /providers/{provider_id}/models` endpoint (shared-secret protected) calling `repo.get_active_models_by_provider()`; return 404 if provider not found; return empty list if provider has no active models
+- [X] T027 [US1] Update `backend/src/main.py` `/extract` endpoint — change `dispatch_llm_call` call signature to pass the full provider document (fetched from DB by `provider_id`) instead of the provider name string, enabling the three-way implementation_type switch
 
 **Checkpoint**: `curl GET /providers` returns DeepSeek with `implementation_type: "openai_compatible"`; `GET /providers/deepseek/models` returns DeepSeek models; `POST /admin/providers` with `http://` URL returns 422; `POST /extract` with `provider: "deepseek"` dispatches via `call_openai_compatible`.
 
@@ -121,8 +121,8 @@ adapter template — no backend code changes required.
 
 **Independent Test**: POST `/admin/providers` with `implementation_type: "template"` and all six adapter fields saves; extraction against that provider uses `_dispatch_template`; a missing adapter sub-field returns 422.
 
-- [ ] T028 [US2] Extend `backend/src/admin_api/routes.py` `POST /admin/providers` — call `validate_provider_url` on `adapter_template.request_url` for template providers; enforce all six adapter sub-fields present (via Pydantic `AdapterTemplate` schema)
-- [ ] T029 [US2] [TEST] Create/extend `backend/tests/integration/test_endpoints.py` — add an end-to-end test that POSTs a `template` provider, then calls `/extract` against it via a stubbed httpx transport, confirming: `{model_id}`, `{api_key}`, `{system_prompt}`, `{user_prompt}` are substituted from the live request into the stubbed transport's captured request; `response_text_path` correctly extracts the LLM reply from the stub's synthetic response; a stubbed 401/429 passes through unchanged and any other non-2xx maps to 502. This is a verification-only task — T027 (call-signature rewire) and T013 (`_dispatch_template`) already contain all the production code this test exercises; no new implementation code is expected here
+- [X] T028 [US2] Extend `backend/src/admin_api/routes.py` `POST /admin/providers` — call `validate_provider_url` on `adapter_template.request_url` for template providers; enforce all six adapter sub-fields present (via Pydantic `AdapterTemplate` schema)
+- [X] T029 [US2] [TEST] Create/extend `backend/tests/integration/test_endpoints.py` — add an end-to-end test that POSTs a `template` provider, then calls `/extract` against it via a stubbed httpx transport, confirming: `{model_id}`, `{api_key}`, `{system_prompt}`, `{user_prompt}` are substituted from the live request into the stubbed transport's captured request; `response_text_path` correctly extracts the LLM reply from the stub's synthetic response; a stubbed 401/429 passes through unchanged and any other non-2xx maps to 502. This is a verification-only task — T027 (call-signature rewire) and T013 (`_dispatch_template`) already contain all the production code this test exercises; no new implementation code is expected here
 
 **Checkpoint**: Saving a template provider with a missing `body_template` returns 422; extraction against a template provider with a synthetic stub returns the text from `response_text_path`.
 

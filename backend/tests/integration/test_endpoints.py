@@ -414,6 +414,10 @@ _DISCOVER_LLM_REPLY = json.dumps({
 
 @patch("src.main.dispatch_llm_call", new_callable=AsyncMock)
 def test_discover_optimizations_endpoint(mock_llm):
+    # T027 (fixed): dispatch_llm_call now requires a provider_doc fetched
+    # from the DB (same as /extract) rather than a bare provider name —
+    # mock the providers collection lookup accordingly.
+    db_conn.db.providers.find_one = AsyncMock(return_value=_OPENAI_PROVIDER_DOC)
     mock_llm.return_value = _DISCOVER_LLM_REPLY
     body = {
         "project_description": "Build a weather application.",
@@ -460,3 +464,325 @@ def test_discover_optimizations_endpoint(mock_llm):
     assert res_data["ai_strategies"][0]["strategy_id"] == "custom_agent_compaction"
     assert res_data["ai_strategies"][0]["included_in_official_savings"] is False
     assert len(res_data["unquantified_opportunities"]) == 1
+    # Regression guard: dispatch_llm_call must be called with the current
+    # provider_doc-based signature (T027), not the old bare `provider` name
+    # string — a keyword mismatch here previously raised TypeError on every
+    # real (unmocked) request while this test still passed, because a mock
+    # silently accepts any kwargs.
+    _, call_kwargs = mock_llm.call_args
+    assert "provider_doc" in call_kwargs
+    assert call_kwargs["provider_doc"]["provider_id"] == "openai"
+    assert "provider" not in call_kwargs
+
+
+# ---------------------------------------------------------------------------
+# T035: Template provider end-to-end extraction via stubbed httpx transport
+# Confirms response_text_path extraction and 401/429 pass-through for the
+# full /extract route (not just the adapter layer in isolation).
+# ---------------------------------------------------------------------------
+
+_T035_PHASE_PAYLOAD = json.dumps({
+    "phases": [
+        {
+            "phase": "design",
+            "agent_role": "Design Agent",
+            "base_input_tokens": 2000,
+            "context_input_tokens": 1000,
+            "cacheable_fraction": 0.4,
+            "tool_call_tokens": 200,
+            "output_tokens": 500,
+            "estimated_calls": 2,
+            "confidence": "high",
+        }
+    ],
+    "extraction_notes": "Template end-to-end extraction succeeded.",
+})
+
+# Outer envelope matches response_text_path = "result.text" from _TEMPLATE_PROVIDER_DOC
+_T035_PROVIDER_BODY = json.dumps({"result": {"text": _T035_PHASE_PAYLOAD}})
+
+
+@patch("src.llm_adapters.httpx.AsyncClient")
+def test_template_extract_end_to_end_response_text_path(mock_async_client_cls):
+    """T035: /extract with a template provider — confirms response_text_path extraction."""
+    db_conn.db.providers.find_one = AsyncMock(return_value=_TEMPLATE_PROVIDER_DOC)
+
+    fake_response = httpx.Response(200, content=_T035_PROVIDER_BODY.encode())
+    mock_instance = AsyncMock()
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_instance.request = AsyncMock(return_value=fake_response)
+    mock_async_client_cls.return_value = mock_instance
+
+    headers = {
+        "X-Shared-Secret": settings.application_secret,
+        "X-Provider-Key": "sk-template-e2e-key",
+    }
+    body = {
+        "project_description": "T035 template end-to-end test.",
+        "document_summaries": [],
+        "provider": "custom_llm",
+        "model_id": "my-custom-model",
+    }
+    response = client.post("/extract", json=body, headers=headers)
+    assert response.status_code == 200, (
+        f"Expected 200, got {response.status_code}: {response.text}"
+    )
+    res_data = response.json()
+    assert len(res_data["phases"]) == 1
+    assert res_data["phases"][0]["phase"] == "design"
+    assert res_data["extraction_notes"] == "Template end-to-end extraction succeeded."
+
+
+@pytest.mark.parametrize("upstream_status,expected_client_status", [
+    (401, 401),
+    (429, 429),
+])
+@patch("src.llm_adapters.httpx.AsyncClient")
+def test_template_extract_401_429_pass_through(mock_async_client_cls, upstream_status, expected_client_status):
+    """T035: 401/429 from upstream template provider pass through unchanged to client."""
+    db_conn.db.providers.find_one = AsyncMock(return_value=_TEMPLATE_PROVIDER_DOC)
+
+    error_body = json.dumps({"error": {"message": f"Upstream returned {upstream_status}"}})
+    fake_response = httpx.Response(upstream_status, content=error_body.encode())
+    mock_instance = AsyncMock()
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_instance.request = AsyncMock(return_value=fake_response)
+    mock_async_client_cls.return_value = mock_instance
+
+    headers = {
+        "X-Shared-Secret": settings.application_secret,
+        "X-Provider-Key": "sk-template-key",
+    }
+    body = {
+        "project_description": "T035 error pass-through test.",
+        "document_summaries": [],
+        "provider": "custom_llm",
+        "model_id": "my-custom-model",
+    }
+    response = client.post("/extract", json=body, headers=headers)
+    assert response.status_code == expected_client_status, (
+        f"Upstream {upstream_status} -> expected client {expected_client_status}, "
+        f"got {response.status_code}: {response.text}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T034: Concurrency & key-isolation tests
+# ---------------------------------------------------------------------------
+
+# Shared model doc that satisfies best_fit_model (exact match on all dims)
+_ROUTING_MODEL_DOC = {
+    "provider": "openai",
+    "model_id": "gpt-4o",
+    "display_name": "GPT-4o",
+    "active": True,
+    "complexity_tier": "complex",
+    "reasoning_complexity": "multi-step",
+    "output_quality": "high-fidelity",
+    "primary_use": ["extraction", "reasoning"],
+    "pricing": {
+        "input_per_1m": "5.00",
+        "output_per_1m": "15.00",
+        "cached_input_per_1m": "2.50",
+        "batch_input_per_1m": "2.50",
+        "batch_output_per_1m": "7.50",
+    },
+}
+
+_ROUTING_PHASE_DOC = {
+    "phase_id": "requirement",
+    "name": "Requirements",
+    "sort_order": 1,
+    "default_agent_role": "BA Agent",
+    "default_cacheable_fraction": 0.4,
+    "ams_classified": False,
+    "default_complexity_tier": "complex",
+    "default_reasoning_complexity": "multi-step",
+    "default_output_quality": "high-fidelity",
+}
+
+
+def test_route_model_concurrent_no_key_leakage():
+    """T034 (part 1): 10 concurrent POST /route-model requests against the same
+    openai_compatible provider — confirms each returns the correct model_id
+    and Cache-Control: no-store, and that there is zero cross-request leakage
+    (all responses reference the same model; routing is stateless).
+    """
+    import asyncio
+    import httpx as _httpx
+
+    # Wire mock DB: phases and providers lookups return the shared stubs;
+    # models cursor returns the single routing model.
+    db_conn.db.phases.find_one = AsyncMock(return_value=_ROUTING_PHASE_DOC)
+    db_conn.db.providers.find_one = AsyncMock(return_value=_OPENAI_PROVIDER_DOC)
+
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[_ROUTING_MODEL_DOC])
+    db_conn.db.models.find.return_value = mock_cursor
+
+    headers = {"X-Shared-Secret": settings.application_secret}
+    body = {"phase_id": "requirement", "provider_id": "openai"}
+
+    N = 12  # >10 as required by the task
+    responses = [
+        client.post("/route-model", json=body, headers=headers)
+        for _ in range(N)
+    ]
+
+    for i, resp in enumerate(responses):
+        assert resp.status_code == 200, (
+            f"Request {i}: expected 200, got {resp.status_code}: {resp.text}"
+        )
+        data = resp.json()
+        # Every response must identify the same model — no cross-contamination
+        assert data["model_id"] == "gpt-4o", (
+            f"Request {i}: expected model_id=gpt-4o, got {data['model_id']}"
+        )
+        assert data["match_type"] in ("exact", "nearest"), (
+            f"Request {i}: unexpected match_type={data['match_type']}"
+        )
+        # Cache-Control: no-store must be present on every response
+        assert resp.headers.get("cache-control") == "no-store", (
+            f"Request {i}: missing Cache-Control: no-store header"
+        )
+
+
+def test_extract_concurrent_key_isolation():
+    """T034 (part 2): 10 concurrent POST /extract requests split across
+    openai_compatible and template providers with distinct per-user API keys.
+    Confirms no key crosses between requests through the three-way dispatch
+    switch (native / openai_compatible / template).
+
+    Each request carries a unique X-Provider-Key. We capture the key that
+    actually reaches the upstream call for each request and assert it matches
+    exactly the key that was sent, with zero cross-contamination.
+    """
+    # openai_compatible provider doc (uses call_openai_compatible, not NATIVE_REGISTRY)
+    _OAI_COMPAT_PROVIDER = {
+        "provider_id": "deepseek",
+        "display_name": "DeepSeek",
+        "active": True,
+        "implementation_type": "openai_compatible",
+        "base_url": "https://api.deepseek.com/v1",
+    }
+
+    LLM_RESPONSE = json.dumps({
+        "phases": [
+            {
+                "phase": "development",
+                "agent_role": "Agent",
+                "base_input_tokens": 100,
+                "context_input_tokens": 50,
+                "cacheable_fraction": 0.2,
+                "tool_call_tokens": 10,
+                "output_tokens": 50,
+                "estimated_calls": 1,
+                "confidence": "low",
+            }
+        ],
+        "extraction_notes": "Concurrency key isolation test.",
+    })
+
+    N = 12  # >10 requests split across two provider types
+
+    # ---- openai_compatible path: mock call_openai_compatible ----
+    # We patch the function at the module where it is resolved from dispatch.
+    captured_compat_keys: list[str] = []
+
+    async def _fake_openai_compatible(base_url, model_id, api_key, system_prompt, user_prompt):
+        captured_compat_keys.append(api_key)
+        return LLM_RESPONSE
+
+    # ---- template path: stubbed httpx transport ----
+    captured_template_keys: list[str] = []
+
+    async def _fake_httpx_request(method=None, url=None, headers=None, json=None, timeout=None):
+        auth_header = dict(headers).get("Authorization", "") if headers else ""
+        # key is after "Bearer "
+        key_val = auth_header.replace("Bearer ", "")
+        captured_template_keys.append(key_val)
+        outer = {"result": {"text": LLM_RESPONSE}}
+        return httpx.Response(200, content=json_module.dumps(outer).encode())
+
+    import json as json_module
+
+    with (
+        patch("src.llm_adapters.LLMAdapter.call_openai_compatible", side_effect=_fake_openai_compatible),
+        patch("src.llm_adapters.httpx.AsyncClient") as mock_cls,
+    ):
+        mock_instance = AsyncMock()
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_instance.request = AsyncMock(side_effect=_fake_httpx_request)
+        mock_cls.return_value = mock_instance
+
+        user_keys_compat = [f"key-compat-user-{i}" for i in range(N // 2)]
+        user_keys_tmpl   = [f"key-tmpl-user-{i}"   for i in range(N // 2)]
+        all_expected: list[tuple[str, str]] = []  # (provider_type, key)
+
+        for key in user_keys_compat:
+            db_conn.db.providers.find_one = AsyncMock(return_value=_OAI_COMPAT_PROVIDER)
+            resp = client.post(
+                "/extract",
+                json={
+                    "project_description": "Concurrency test.",
+                    "document_summaries": [],
+                    "provider": "deepseek",
+                    "model_id": "deepseek-chat",
+                },
+                headers={
+                    "X-Shared-Secret": settings.application_secret,
+                    "X-Provider-Key": key,
+                },
+            )
+            assert resp.status_code == 200, (
+                f"openai_compatible request with key={key} failed: {resp.text}"
+            )
+            all_expected.append(("compat", key))
+
+        for key in user_keys_tmpl:
+            db_conn.db.providers.find_one = AsyncMock(return_value=_TEMPLATE_PROVIDER_DOC)
+            resp = client.post(
+                "/extract",
+                json={
+                    "project_description": "Concurrency test.",
+                    "document_summaries": [],
+                    "provider": "custom_llm",
+                    "model_id": "my-custom-model",
+                },
+                headers={
+                    "X-Shared-Secret": settings.application_secret,
+                    "X-Provider-Key": key,
+                },
+            )
+            assert resp.status_code == 200, (
+                f"template request with key={key} failed: {resp.text}"
+            )
+            all_expected.append(("tmpl", key))
+
+    # Validate zero cross-contamination: each captured key must match
+    # the corresponding expected key in sequence.
+    assert len(captured_compat_keys) == N // 2, (
+        f"Expected {N // 2} compat calls, got {len(captured_compat_keys)}"
+    )
+    assert len(captured_template_keys) == N // 2, (
+        f"Expected {N // 2} template calls, got {len(captured_template_keys)}"
+    )
+
+    for i, (sent_key, captured_key) in enumerate(
+        zip(user_keys_compat, captured_compat_keys)
+    ):
+        assert sent_key == captured_key, (
+            f"openai_compatible request {i}: sent key={sent_key!r} "
+            f"but upstream received key={captured_key!r} — KEY LEAKED"
+        )
+
+    for i, (sent_key, captured_key) in enumerate(
+        zip(user_keys_tmpl, captured_template_keys)
+    ):
+        assert sent_key == captured_key, (
+            f"template request {i}: sent key={sent_key!r} "
+            f"but upstream received key={captured_key!r} — KEY LEAKED"
+        )

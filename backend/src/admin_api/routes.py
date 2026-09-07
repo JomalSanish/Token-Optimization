@@ -3,10 +3,11 @@ from src.admin_api.auth import validate_admin_auth
 from src.repository import CatalogRepository
 from src.validators import validate_provider_url
 from src.schemas import (
-    ModelIn, ModelOut, ModelPricing, ProviderIn, ProviderOut,
+    ModelIn, ModelOut, ModelPricing, ModelUpdate, ProviderIn, ProviderOut,
     OptimizerRuleIn, OptimizerRuleOut, PricingHistoryOut,
-    PhaseIn, PhaseOut, PhaseUpdate,
+    PhaseIn, PhaseOut, PhaseUpdate, ProviderUpdate,
 )
+from pydantic import ValidationError
 from typing import List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
@@ -48,6 +49,43 @@ async def create_model(model: ModelIn):
         )
     model_dict = model.model_dump()
     return await repo.create_model(model_dict)
+
+# T031: Capability tag partial update — separate PATCH route so the existing
+# pricing-update path (/models/{model_id}/pricing) stays unchanged.
+# Accepts a ModelUpdate body; only fields present in the request are applied.
+# Enum validation is enforced by ModelUpdate's model_validator so invalid
+# values automatically produce a 422 before this handler runs.
+@admin_router.patch("/models/{model_id}/tags", response_model=ModelOut)
+async def update_model_tags(
+    model_id: str,
+    update: ModelUpdate,
+    provider: str = Query(..., description="Provider owning the model ID"),
+):
+    """Partial update for model capability tag fields.
+
+    Only fields present in the request body are written; omitted fields are
+    left unchanged.  All four capability tags are validated against their
+    fixed enum sets — an invalid value returns 422 automatically.
+    """
+    # Verify the model exists under the given provider.
+    provider_model = await repo.get_model_by_provider_and_id(provider, model_id)
+    if not provider_model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model '{provider}/{model_id}' not found."
+        )
+    mutable_fields = update.model_dump(exclude_unset=True)
+    if not mutable_fields:
+        # Nothing to update — return the existing document unchanged.
+        return provider_model
+    updated = await repo.update_model(provider, model_id, mutable_fields)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update model capability tags."
+        )
+    return updated
+
 
 @admin_router.patch("/models/{model_id}", response_model=ModelOut)
 async def update_model_pricing(
@@ -143,35 +181,73 @@ async def create_provider(provider: ProviderIn):
     return await repo.create_provider(provider.model_dump())
 
 
-# T024: Full provider update — replaces the old active-only PATCH.
-# Accepts a complete ProviderIn body, SSRF-validates any updated URL, and
-# calls repo.update_provider() which stamps updated_at automatically.
+# T024 (fixed): Partial provider update, per the API contract ("Request body:
+# any subset of ProviderIn fields, including {"active": false} to
+# deactivate."). Only fields actually present in the request are written.
+# provider_id is not a field on ProviderUpdate, so it can never be changed.
+#
+# Because native/openai_compatible/template have conditional-required fields
+# (enforced by ProviderIn's model_validator), a partial PATCH can't be
+# validated in isolation — sending just {"active": false} must not trip a
+# "base_url is required" error about fields the caller never touched. So we
+# merge the submitted subset onto the *existing* document first, then
+# validate the merged result against the full ProviderIn schema. Only fields
+# actually submitted are sent to the DB write.
 @admin_router.patch("/providers/{provider_id}", response_model=ProviderOut)
-async def update_provider(provider_id: str, provider: ProviderIn):
+async def update_provider(provider_id: str, provider: ProviderUpdate):
     existing = await repo.get_provider_by_id(provider_id)
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Provider '{provider_id}' not found."
         )
-    # SSRF-validate any URL present on the updated payload.
-    if provider.implementation_type == "openai_compatible" and provider.base_url:
+    submitted_fields = provider.model_dump(exclude_unset=True)
+    if not submitted_fields:
+        # Nothing to update — return the existing document unchanged.
+        return existing
+
+    # Merge onto the existing document (existing values for anything not
+    # submitted) and re-validate as a full ProviderIn for cross-field
+    # consistency (e.g. implementation_type vs. its required sub-fields).
+    merged = {**existing, **submitted_fields}
+    try:
+        validated = ProviderIn(**{
+            k: v for k, v in merged.items()
+            if k in ProviderIn.model_fields
+        })
+    except ValidationError as exc:
+        # include_context=False: pydantic's default errors() embeds the raw
+        # exception object (e.g. the ValueError raised by a model_validator)
+        # in each error's "ctx", which is not JSON-serializable and would
+        # otherwise crash FastAPI's own exception handler while trying to
+        # build this very 422 response.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors(include_context=False, include_url=False),
+        )
+
+    # SSRF-validate any URL present on the merged (post-update) document —
+    # not just on newly-submitted fields, since e.g. changing
+    # implementation_type to "openai_compatible" without resending base_url
+    # would otherwise leave an unvalidated pre-existing base_url in effect.
+    if validated.implementation_type == "openai_compatible" and validated.base_url:
         try:
-            validate_provider_url(provider.base_url)
+            validate_provider_url(validated.base_url)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"base_url validation failed: {exc}",
             )
-    if provider.implementation_type == "template" and provider.adapter_template:
+    if validated.implementation_type == "template" and validated.adapter_template:
         try:
-            validate_provider_url(provider.adapter_template.request_url)
+            validate_provider_url(validated.adapter_template.request_url)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"adapter_template.request_url validation failed: {exc}",
             )
-    updated = await repo.update_provider(provider_id, provider.model_dump())
+
+    updated = await repo.update_provider(provider_id, submitted_fields)
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

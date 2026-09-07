@@ -81,6 +81,53 @@ class ModelOut(ModelIn):
     model_config = common_config
 
 
+# --- T031: Partial update schema for PATCH /admin/models/{model_id} ---
+# All fields are optional so a caller can PATCH just capability tags without
+# resending pricing or other model fields.  Only fields present in the
+# request (`exclude_unset=True`) are written to the DB.
+class ModelUpdate(BaseModel):
+    """Partial model update — supports capability tag fields.
+
+    All fields are optional; only those present in the request body are
+    applied. Enum validation is identical to ModelIn — invalid values
+    result in a 422 Unprocessable Entity response via Pydantic.
+    """
+    complexity_tier: Optional[str] = None
+    reasoning_complexity: Optional[str] = None
+    output_quality: Optional[str] = None
+    primary_use: Optional[List[str]] = None
+
+    model_config = common_config
+
+    @model_validator(mode="after")
+    def validate_capability_tags_if_present(self) -> "ModelUpdate":
+        if self.complexity_tier is not None and self.complexity_tier not in COMPLEXITY_TIER_VALUES:
+            raise ValueError(
+                f"complexity_tier must be one of {sorted(COMPLEXITY_TIER_VALUES)}, "
+                f"got '{self.complexity_tier}'"
+            )
+        if self.reasoning_complexity is not None and self.reasoning_complexity not in REASONING_COMPLEXITY_VALUES:
+            raise ValueError(
+                f"reasoning_complexity must be one of {sorted(REASONING_COMPLEXITY_VALUES)}, "
+                f"got '{self.reasoning_complexity}'"
+            )
+        if self.output_quality is not None and self.output_quality not in OUTPUT_QUALITY_VALUES:
+            raise ValueError(
+                f"output_quality must be one of {sorted(OUTPUT_QUALITY_VALUES)}, "
+                f"got '{self.output_quality}'"
+            )
+        if self.primary_use is not None:
+            if not self.primary_use:
+                raise ValueError("primary_use must contain at least one value")
+            invalid = set(self.primary_use) - PRIMARY_USE_VALUES
+            if invalid:
+                raise ValueError(
+                    f"primary_use contains invalid values: {sorted(invalid)}. "
+                    f"Allowed: {sorted(PRIMARY_USE_VALUES)}"
+                )
+        return self
+
+
 # --- T005: AdapterTemplate sub-schema (used when implementation_type = "template") ---
 class AdapterTemplate(BaseModel):
     """Declarative adapter configuration for novel-schema providers.
@@ -167,6 +214,25 @@ class ProviderOut(ProviderIn):
     """
     created_at: datetime
     updated_at: datetime
+
+    model_config = common_config
+
+
+# --- T024 fix: PATCH /admin/providers/{provider_id} is a partial update per
+# the API contract ("Request body: any subset of ProviderIn fields, including
+# {"active": false} to deactivate."). provider_id is intentionally NOT a field
+# here so it can never be changed via PATCH. All other fields are optional;
+# the route layer merges the submitted subset onto the existing document and
+# re-validates the merged result against ProviderIn so the native/
+# openai_compatible/template conditional-required rules still hold even when
+# only one field (e.g. just {"active": false}) is sent.
+class ProviderUpdate(BaseModel):
+    display_name: Optional[str] = None
+    active: Optional[bool] = None
+    implementation_type: Optional[str] = None
+    native_key: Optional[str] = None
+    base_url: Optional[str] = None
+    adapter_template: Optional[AdapterTemplate] = None
 
     model_config = common_config
 

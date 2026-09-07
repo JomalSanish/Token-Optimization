@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Depends, status, HTTPException, Header
+from fastapi import FastAPI, Depends, status, HTTPException, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
 from src.config import settings
 from src.database import connect_to_mongo, close_mongo_connection
 from src.middleware import validate_shared_secret
 from src.repository import CatalogRepository
 from src.admin_api.routes import admin_router
-from src.schemas import ModelOut, OptimizerRuleOut, ProviderPublicOut
+from src.schemas import ModelOut, OptimizerRuleOut, ProviderPublicOut, RouteModelRequest, RouteModelResponse
+from src.routing import best_fit_model
 from pymongo.errors import PyMongoError
 from typing import List, Dict, Any
 import logging
@@ -161,6 +162,109 @@ async def get_provider_models(provider_id: str):
         )
 
 
+# T033: POST /route-model — best-fit model routing endpoint.
+# Cache-Control: no-store is set on EVERY response (success, "none", and 404
+# alike) per contracts/backend-api.md and constitution §IX: routing results
+# MUST NOT be served from any cache because admin catalog edits must take
+# immediate effect without a cache purge step.
+@app.post(
+    "/route-model",
+    response_model=RouteModelResponse,
+    dependencies=[Depends(validate_shared_secret)],
+    tags=["routing"]
+)
+async def route_model(payload: RouteModelRequest, response: Response):
+    """Return the best-fit active model for the given phase and provider.
+
+    404 if phase_id or provider_id is not found in the DB.
+    200 with match_type='none' if the provider exists but has zero active models.
+    200 with match_type='exact' or 'nearest' otherwise.
+
+    Cache-Control: no-store is always set so routing decisions are never
+    served stale after an admin catalog change.
+    """
+    # Always stamp no-store regardless of the response outcome.
+    response.headers["Cache-Control"] = "no-store"
+
+    repo = CatalogRepository()
+    try:
+        # Fetch phase and provider; 404 if either is missing.
+        #
+        # NOTE: mutating `response.headers` above does NOT carry over to the
+        # response FastAPI builds when an HTTPException is raised — the
+        # exception handler constructs a fresh JSONResponse using only the
+        # `headers=` kwarg passed to HTTPException itself. So Cache-Control
+        # must be set explicitly on every HTTPException raised in this
+        # endpoint, not just relied upon via the injected `response` object,
+        # or 404s here would silently ship without it despite the comment
+        # above and the contract's "every response... 404 alike" requirement.
+        phase_doc = await repo.get_phase_by_id(payload.phase_id)
+        if not phase_doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Phase '{payload.phase_id}' not found.",
+                headers={"Cache-Control": "no-store"},
+            )
+
+        provider_doc = await repo.get_provider_by_id(payload.provider_id)
+        if not provider_doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Provider '{payload.provider_id}' not found.",
+                headers={"Cache-Control": "no-store"},
+            )
+
+        # Fetch the provider's active models.
+        active_models = await repo.get_active_models_by_provider(payload.provider_id)
+
+        # Provider exists but has no active models — valid, not an error (200).
+        if not active_models:
+            return RouteModelResponse(
+                phase_id=payload.phase_id,
+                provider_id=payload.provider_id,
+                model_id=None,
+                display_name=None,
+                match_type="none",
+                ordinal_distance=None,
+                blended_rate=None,
+            )
+
+        # Run the pure best-fit routing algorithm.
+        result = best_fit_model(phase_doc, active_models)
+        if result is None:
+            # best_fit_model returns None only when active_models is empty;
+            # that path is already handled above, but guard defensively.
+            return RouteModelResponse(
+                phase_id=payload.phase_id,
+                provider_id=payload.provider_id,
+                model_id=None,
+                display_name=None,
+                match_type="none",
+                ordinal_distance=None,
+                blended_rate=None,
+            )
+
+        return RouteModelResponse(
+            phase_id=payload.phase_id,
+            provider_id=payload.provider_id,
+            model_id=result["model_id"],
+            display_name=result.get("display_name"),
+            match_type=result["_match_type"],
+            ordinal_distance=result["_ordinal_distance"],
+            blended_rate=result["_blended_rate"],
+        )
+
+    except HTTPException:
+        raise
+    except PyMongoError as e:
+        logger.error(f"Database error during route-model lookup: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authoritative configuration database is currently unavailable.",
+            headers={"Cache-Control": "no-store"},
+        )
+
+
 # Import schemas for endpoints
 from src.schemas import (
     ExtractRequest, ExtractResponse, ExtractedPhase,
@@ -240,7 +344,7 @@ async def extract_project_signals(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Authoritative configuration database is currently unavailable."
             )
-        if not provider_doc:
+        if not provider_doc or not provider_doc.get("active", False):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Provider '{payload.provider}' not found or inactive."
@@ -632,10 +736,35 @@ async def discover_custom_optimizations(
         )
         
     model = payload.pricing_snapshot.models[0]
-    
+
     try:
+        # T027 follow-up fix: dispatch_llm_call was rewired to take the full
+        # provider_doc (for the native/openai_compatible/template three-way
+        # switch) instead of a bare provider name string. That rewire was
+        # applied to /extract but missed here, which called
+        # dispatch_llm_call(provider=model.provider, ...) — `provider` isn't
+        # even a parameter of the current function (it's `provider_doc`), so
+        # this raised a TypeError on every real request (masked in tests
+        # because the test mocks dispatch_llm_call directly, and a mock
+        # accepts any keyword argument). Fetch the provider document the
+        # same way /extract does.
+        repo_inner = CatalogRepository()
+        try:
+            provider_doc = await repo_inner.get_provider_by_id(model.provider)
+        except PyMongoError as e:
+            logger.error(f"Database error during provider lookup for discovery: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authoritative configuration database is currently unavailable."
+            )
+        if not provider_doc or not provider_doc.get("active", False):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Provider '{model.provider}' not found or inactive."
+            )
+
         response_text = await dispatch_llm_call(
-            provider=model.provider,
+            provider_doc=provider_doc,
             model_id=model.model_id,
             api_key=x_provider_key,
             system_prompt=system_prompt,

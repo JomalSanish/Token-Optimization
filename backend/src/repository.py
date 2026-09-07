@@ -119,6 +119,24 @@ class CatalogRepository:
             return_document=True
         )
 
+    async def update_model(
+        self, provider: str, model_id: str, update_doc: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Perform a field-level partial update on a model document.
+
+        *update_doc* contains only the fields to overwrite (built from the
+        validated ModelUpdate payload by the caller, using exclude_unset=True).
+        `updated_at` is always refreshed automatically.
+
+        Returns the updated document, or None if the model was not found.
+        """
+        update_doc["updated_at"] = datetime.utcnow()
+        return await self.db.models.find_one_and_update(
+            {"provider": provider, "model_id": model_id},
+            {"$set": update_doc},
+            return_document=True,
+        )
+
     async def get_pricing_history(self, model_id: str) -> List[Dict[str, Any]]:
         cursor = self.db.pricing_history.find({"model_id": model_id}).sort("changed_at", -1)
         return await cursor.to_list(length=100)

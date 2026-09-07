@@ -40,6 +40,16 @@ def test_secrets_are_never_logged(mock_llm, caplog):
         "effective_from": "2026-08-24T21:00:00"
     }
     db_conn.db.models.find_one = AsyncMock(return_value=db_model)
+    # T027 (fixed): dispatch_llm_call now requires a provider_doc fetched
+    # from the DB (same as /extract) rather than a bare provider name —
+    # mock the providers collection lookup accordingly.
+    db_conn.db.providers.find_one = AsyncMock(return_value={
+        "provider_id": "openai",
+        "display_name": "OpenAI",
+        "active": True,
+        "implementation_type": "native",
+        "native_key": "openai",
+    })
 
     body = {
         "project_description": "Audit security test.",

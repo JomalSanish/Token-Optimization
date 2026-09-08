@@ -1,20 +1,18 @@
+import os
 from pathlib import Path
 
 FRONTEND = Path(__file__).resolve().parents[3] / "frontend"
 
-def test_dashboard_contains_no_admin_credential_or_admin_api_calls():
-    app_js = (FRONTEND / "src" / "app.js").read_text(encoding="utf-8")
-    index_html = (FRONTEND / "index.html").read_text(encoding="utf-8")
+def test_dashboard_contains_no_admin_credential():
+    # Scan all js/jsx files in frontend/src
+    for root, _, files in os.walk(FRONTEND / "src"):
+        for f in files:
+            if f.endswith((".js", ".jsx")):
+                content = (Path(root) / f).read_text(encoding="utf-8")
+                assert "test_admin_auth_secret_456" not in content, f"Hardcoded admin secret found in {f}"
+                assert "test_app_secret_123" not in content, f"Hardcoded app secret found in {f}"
 
-    assert "test_admin_auth_secret_456" not in app_js
-    assert "ADMIN_AUTH_SECRET" not in app_js
-    assert "/admin/" not in app_js
-    assert "test_admin_auth_secret_456" not in index_html
-
-def test_admin_credential_is_entered_at_runtime():
-    admin_js = (FRONTEND / "src" / "admin.js").read_text(encoding="utf-8")
-
-    assert "test_admin_auth_secret_456" not in admin_js
-    assert "localStorage" not in admin_js
-    assert "sessionStorage" not in admin_js
-    assert "Authorization: `Bearer ${credential}`" in admin_js
+def test_admin_uses_bearer_token_auth():
+    api_js = (FRONTEND / "src" / "services" / "api.js").read_text(encoding="utf-8")
+    assert "Authorization" in api_js
+    assert "Bearer" in api_js

@@ -1,0 +1,122 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.emptyState {
+  color: var(--text);
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 40px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  text-align: center;
+}
+
+.error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.cardHeader {
+  margin-bottom: 20px;
+}
+
+.cardHeader h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.cardHeader p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  font-size: 16px;
+  align-self: flex-start;
+  margin-bottom: 24px;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.discoveryList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.discoveryItem {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.discoveryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.featureName {
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 16px;
+}
+
+.impactBadge {
+  background: rgba(170, 59, 255, 0.1);
+  color: var(--accent);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.impactBadgeHigh {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.featureDesc {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}

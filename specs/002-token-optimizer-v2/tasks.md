@@ -174,12 +174,12 @@ in localStorage only. Admin area has no API key UI anywhere.
 
 **Independent Test**: Adding a key for "deepseek" saves to localStorage with no network request; removing it removes it from localStorage; navigating to `/admin` has no key input field.
 
-- [ ] T037 [US3] Create `frontend/src/services/apiKeysService.js` — port from old `api_keys.js`; generalize hardcoded `{openai:[], google:[], anthropic:[]}` default to a dynamic provider_id map; expose `getKeys()`, `addKey(provider_id, key, label)`, `removeKey(provider_id, keyId)`, `getActiveKey(provider_id)`, `markKeyExhausted(provider_id, keyId)`
-- [ ] T038 [US3] Create `frontend/src/services/api.js` — centralized `apiFetch(path, options)` wrapper that injects `X-App-Secret` header from an env constant (`import.meta.env.VITE_APP_SECRET`) on every request
-- [ ] T039 [US3] Create `frontend/src/layouts/UserLayout.jsx` — persistent left sidebar with nav links for API Keys (`/keys`), Project (`/project`), Estimate (`/estimate`), Optimize (`/optimize`), Discover (`/discover`); renders `<Outlet />` for child routes
-- [ ] T040 [US3] Create `frontend/src/layouts/AdminLayout.jsx` — persistent left sidebar with nav links for Providers, Models, Pricing, Rules, Phases under `/admin/*`; renders `<Outlet />`; contains NO API key input fields, state, or references
-- [ ] T041 [US3] Create `frontend/src/main.jsx` — React Router v6 `<BrowserRouter>` with nested routes: `/` redirect to `/keys`; user routes under `<UserLayout>`; admin routes under `<AdminLayout>`
-- [ ] T042 [US3] Create `frontend/src/pages/user/KeysPage.jsx` — fetches active provider list from `GET /providers` on mount; renders one row per provider showing provider display name, an API key input, an optional label input, and an Add button; existing stored keys shown with a Remove button; all adds/removes call `apiKeysService` (localStorage only, no network write); admin layout link is NOT present on this page
+- [X] T037 [US3] Create `frontend/src/services/apiKeysService.js` — port from old `api_keys.js`; generalize hardcoded `{openai:[], google:[], anthropic:[]}` default to a dynamic provider_id map; expose `getKeys()`, `addKey(provider_id, key, label)`, `removeKey(provider_id, keyId)`, `getActiveKey(provider_id)`, `markKeyExhausted(provider_id, keyId)`
+- [X] T038 [US3] Create `frontend/src/services/api.js` — centralized `apiFetch(path, options)` wrapper that injects `X-App-Secret` header from an env constant (`import.meta.env.VITE_APP_SECRET`) on every request
+- [X] T039 [US3] Create `frontend/src/layouts/UserLayout.jsx` — persistent left sidebar with nav links for API Keys (`/keys`), Project (`/project`), Estimate (`/estimate`), Optimize (`/optimize`), Discover (`/discover`); renders `<Outlet />` for child routes
+- [X] T040 [US3] Create `frontend/src/layouts/AdminLayout.jsx` — persistent left sidebar with nav links for Providers, Models, Pricing, Rules, Phases under `/admin/*`; renders `<Outlet />`; contains NO API key input fields, state, or references
+- [X] T041 [US3] Create `frontend/src/main.jsx` — React Router v6 `<BrowserRouter>` with nested routes: `/` redirect to `/keys`; user routes under `<UserLayout>`; admin routes under `<AdminLayout>`
+- [X] T042 [US3] Create `frontend/src/pages/user/KeysPage.jsx` — fetches active provider list from `GET /providers` on mount; renders one row per provider showing provider display name, an API key input, an optional label input, and an Add button; existing stored keys shown with a Remove button; all adds/removes call `apiKeysService` (localStorage only, no network write); admin layout link is NOT present on this page
 
 **Checkpoint**: Navigate to `http://localhost:5173/keys`; add a "deepseek" key → appears in list; remove it → disappears; open DevTools Network — no write request to backend during add/remove.
 
@@ -192,8 +192,8 @@ applies a client-side plan-tier filter, and triggers extraction.
 
 **Independent Test**: Provider picker shows only providers with stored keys; model picker populates from `GET /providers/{id}/models`; plan-tier selector filters client-side with no network call; extraction POSTs to `/extract` with `X-Provider-Key` from localStorage.
 
-- [ ] T043 [US1] Create `frontend/src/config/planTiers.js` — export `PLAN_TIERS` constant mapping tier name to `allowedComplexityTiers` array; this is the sole source of plan-tier data; not fetched from backend
-- [ ] T044 [US1] Create `frontend/src/pages/user/ProjectPage.jsx` — reads stored keys from `apiKeysService`; renders provider picker populated only from providers for which a key exists; on provider selection calls `GET /providers/{id}/models` via `api.js`; renders model dropdown from the response; renders optional Plan tier `<select>` that filters the model list client-side using `PLAN_TIERS` (no network call on tier change); renders project description textarea and document upload; on submit calls `POST /extract` with `X-Provider-Key` header from `apiKeysService.getActiveKey(provider_id)`; stores extraction result in `sessionStorage["extractResult"]` and extraction context in `sessionStorage["extractionContext"]`
+- [X] T043 [US1] Create `frontend/src/config/planTiers.js` — export `PLAN_TIERS` constant mapping tier name to `allowedComplexityTiers` array; this is the sole source of plan-tier data; not fetched from backend
+- [X] T044 [US1] Create `frontend/src/pages/user/ProjectPage.jsx` — reads stored keys from `apiKeysService`; renders provider picker populated only from providers for which a key exists; on provider selection calls `GET /providers/{id}/models` via `api.js`; renders model dropdown from the response; renders optional Plan tier `<select>` that filters the model list client-side using `PLAN_TIERS` (no network call on tier change); renders project description textarea and document upload; on submit calls `POST /extract` with `X-Provider-Key` header from `apiKeysService.getActiveKey(provider_id)`; stores extraction result in `sessionStorage["extractResult"]` and extraction context in `sessionStorage["extractionContext"]`
 
 **Checkpoint**: Hold only an OpenAI key → only OpenAI appears in provider picker; change plan tier → model list filters without network call; add a DeepSeek key → DeepSeek appears in picker.
 
@@ -206,7 +206,7 @@ provider), and optionally clicks "Suggest model" per phase to call `/route-model
 
 **Independent Test**: Phase model picker includes models from all providers; "Suggest model" calls `POST /route-model` and pre-fills the picker; override is preserved through to the estimate calculation.
 
-- [ ] T045 [US5] Create `frontend/src/pages/user/EstimatePage.jsx` — loads phase data from `sessionStorage["extractResult"]` or defaults to manual entry; fetches full model catalog from `GET /models` (all providers, all active models); renders editable phase table with per-row assigned-model picker spanning all providers grouped by provider name; adds a "Suggest model" button per row that calls `POST /route-model {phase_id, provider_id}` and pre-fills the picker (user can still override); on estimate submit calls `POST /estimate`; stores result in `sessionStorage["estimateResult"]`
+- [X] T045 [US5] Create `frontend/src/pages/user/EstimatePage.jsx` — loads phase data from `sessionStorage["extractResult"]` or defaults to manual entry; fetches full model catalog from `GET /models` (all providers, all active models); renders editable phase table with per-row assigned-model picker spanning all providers grouped by provider name; adds a "Suggest model" button per row that calls `POST /route-model {phase_id, provider_id}` and pre-fills the picker (user can still override); on estimate submit calls `POST /estimate`; stores result in `sessionStorage["estimateResult"]`
 
 **Checkpoint**: Phase table model picker shows models from OpenAI AND Anthropic AND Google (not just the extraction provider); "Suggest model" pre-fills picker but user can immediately select a different model; resulting estimate uses the user's selected (possibly overridden) model.
 
@@ -217,8 +217,8 @@ provider), and optionally clicks "Suggest model" per phase to call `/route-model
 **Goal**: Port the existing optimize and discover flows into the React SPA routing shell.
 No behavioral changes — these are UI migrations only.
 
-- [ ] T046 [P] Create `frontend/src/pages/user/OptimizePage.jsx` — port existing `/optimize` call and results display from `frontend/src/app.js`; reads `sessionStorage["estimateResult"]`; calls `POST /optimize`; stores result in `sessionStorage["optimizeResult"]`; renders per-phase triggered rules, savings, and advisory recommendations in their existing two-category split
-- [ ] T047 [P] Create `frontend/src/pages/user/DiscoverPage.jsx` — port existing `/discover-optimizations` call from `frontend/src/app.js`; reads extraction context from `sessionStorage["extractionContext"]` for provider+model; disables the Discover action if no extraction context exists; calls `POST /discover-optimizations` with `X-Provider-Key` from `apiKeysService.getActiveKey(extractionContext.provider_id)`; no separate provider/model selector on this page
+- [X] T046 [P] Create `frontend/src/pages/user/OptimizePage.jsx` — port existing `/optimize` call and results display from `frontend/src/app.js`; reads `sessionStorage["estimateResult"]`; calls `POST /optimize`; stores result in `sessionStorage["optimizeResult"]`; renders per-phase triggered rules, savings, and advisory recommendations in their existing two-category split
+- [X] T047 [P] Create `frontend/src/pages/user/DiscoverPage.jsx` — port existing `/discover-optimizations` call from `frontend/src/app.js`; reads extraction context from `sessionStorage["extractionContext"]` for provider+model; disables the Discover action if no extraction context exists; calls `POST /discover-optimizations` with `X-Provider-Key` from `apiKeysService.getActiveKey(extractionContext.provider_id)`; no separate provider/model selector on this page
 
 **Checkpoint**: Navigating to `/optimize` after estimate shows optimizer output; navigating to `/discover` without a prior extraction shows a disabled/empty state.
 
@@ -229,11 +229,11 @@ No behavioral changes — these are UI migrations only.
 **Goal**: React admin area with full CRUD for Providers (implementation_type switch form), Models
 (four capability tag dropdowns), Pricing, Rules, and the new Phases page.
 
-- [ ] T048 [US1] [US2] Create `frontend/src/pages/admin/ProvidersPage.jsx` — fetches `GET /admin/providers`; renders provider list with Add and Edit buttons; provider form shows `implementation_type` as a radio/select that dynamically shows/hides: native → `native_key` picker (static list from a frontend constant matching the backend's registered keys: `["openai","anthropic","google"]`); openai_compatible → `base_url` text field; template → all six adapter template fields; on save calls `POST /admin/providers`; on status toggle calls `PATCH /admin/providers/{id}`; NO API key input fields anywhere on this page
-- [ ] T049 [US4] Create `frontend/src/pages/admin/ModelsPage.jsx` — fetches `GET /admin/models`; renders model list; model form includes four required capability tag fields as `<select>` elements with only the fixed enum values (no free-text); `primary_use` is a multi-select; on save calls `POST /admin/models`; on pricing update calls `PATCH /admin/models/{id}`; on activate/deactivate calls the activate/deactivate endpoints
-- [ ] T050 [P] Create `frontend/src/pages/admin/PricingPage.jsx` — port existing pricing management UI from `frontend/src/admin.js`; no behavioral change
-- [ ] T051 [P] Create `frontend/src/pages/admin/RulesPage.jsx` — port existing optimizer rules management UI from `frontend/src/admin.js`; no behavioral change
-- [ ] T052 [US6] Create `frontend/src/pages/admin/PhasesPage.jsx` — fetches `GET /admin/phases`; renders phase list sorted by `sort_order`; phase form includes all phase fields plus three required default capability requirement dropdowns (`default_complexity_tier`, `default_reasoning_complexity`, `default_output_quality`) using the same fixed enums as model tags; on save calls `POST /admin/phases`; on edit calls `PATCH /admin/phases/{id}`
+- [X] T048 [US1] [US2] Create `frontend/src/pages/admin/ProvidersPage.jsx` — fetches `GET /admin/providers`; renders provider list with Add and Edit buttons; provider form shows `implementation_type` as a radio/select that dynamically shows/hides: native → `native_key` picker (static list from a frontend constant matching the backend's registered keys: `["openai","anthropic","google"]`); openai_compatible → `base_url` text field; template → all six adapter template fields; on save calls `POST /admin/providers`; on status toggle calls `PATCH /admin/providers/{id}`; NO API key input fields anywhere on this page
+- [X] T049 [US4] Create `frontend/src/pages/admin/ModelsPage.jsx` — fetches `GET /admin/models`; renders model list; model form includes four required capability tag fields as `<select>` elements with only the fixed enum values (no free-text); `primary_use` is a multi-select; on save calls `POST /admin/models`; on pricing update calls `PATCH /admin/models/{id}`; on activate/deactivate calls the activate/deactivate endpoints
+- [X] T050 [P] Create `frontend/src/pages/admin/PricingPage.jsx` — port existing pricing management UI from `frontend/src/admin.js`; no behavioral change
+- [X] T051 [P] Create `frontend/src/pages/admin/RulesPage.jsx` — port existing optimizer rules management UI from `frontend/src/admin.js`; no behavioral change
+- [X] T052 [US6] Create `frontend/src/pages/admin/PhasesPage.jsx` — fetches `GET /admin/phases`; renders phase list sorted by `sort_order`; phase form includes all phase fields plus three required default capability requirement dropdowns (`default_complexity_tier`, `default_reasoning_complexity`, `default_output_quality`) using the same fixed enums as model tags; on save calls `POST /admin/phases`; on edit calls `PATCH /admin/phases/{id}`
 
 **Checkpoint**: Admin navigates to `/admin/providers`; selects "template" implementation type → all six adapter fields appear; selects "native" → only `native_key` picker shown; navigates to `/admin/models` → four capability dropdowns visible; navigates to `/admin/phases` → three default requirement dropdowns visible; no API key field exists anywhere in the admin area.
 
@@ -243,12 +243,12 @@ No behavioral changes — these are UI migrations only.
 
 **Purpose**: Final wiring, edge-case handling, and validation guide run-through.
 
-- [ ] T053 Add empty-state handling to `frontend/src/pages/user/ProjectPage.jsx` — show "No models available" message when `GET /providers/{id}/models` returns an empty array
-- [ ] T054 [P] Add empty-state handling to `frontend/src/pages/user/KeysPage.jsx` — show "Add your first API key to get started" when localStorage has no keys
-- [ ] T055 [P] Wire `frontend/src/main.jsx` root `/` redirect to `/keys` and add a 404 catch-all route
-- [ ] T056 [P] Update `frontend/index.html` title and meta description to "Token Optimizer — User Dashboard"
-- [ ] T057 Manually run through all ten validation scenarios in `specs/002-token-optimizer-v2/quickstart.md` and confirm each expected outcome matches; fix any discrepancies before marking complete
-- [ ] T057A [Constitution: Pre-Commit Auditing] Add `.pre-commit-config.yaml` at repo root with a secret-scan hook (`gitleaks` or `detect-secrets`) covering both `backend/` and `frontend/`; run it once against the full working tree and resolve any findings before this feature is marked complete — the constitution requires this gate exist, and nothing in the current task list creates it
+- [X] T053 Add empty-state handling to `frontend/src/pages/user/ProjectPage.jsx` — show "No models available" message when `GET /providers/{id}/models` returns an empty array
+- [X] T054 [P] Add empty-state handling to `frontend/src/pages/user/KeysPage.jsx` — show "Add your first API key to get started" when localStorage has no keys
+- [X] T055 [P] Wire `frontend/src/main.jsx` root `/` redirect to `/keys` and add a 404 catch-all route
+- [X] T056 [P] Update `frontend/index.html` title and meta description to "Token Optimizer — User Dashboard"
+- [X] T057 Manually run through all ten validation scenarios in `specs/002-token-optimizer-v2/quickstart.md` and confirm each expected outcome matches; fix any discrepancies before marking complete
+- [X] T057A [Constitution: Pre-Commit Auditing] Add `.pre-commit-config.yaml` at repo root with a secret-scan hook (`gitleaks` or `detect-secrets`) covering both `backend/` and `frontend/`; run it once against the full working tree and resolve any findings before this feature is marked complete — the constitution requires this gate exist, and nothing in the current task list creates it
 
 ---
 

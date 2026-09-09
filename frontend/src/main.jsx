@@ -34,6 +34,7 @@ createRoot(document.getElementById('root')).render(
         {/* User Routes */}
         <Route element={<UserLayout />}>
           <Route path="/keys" element={<KeysPage />} />
+          <Route path="/models" element={<Navigate to="/keys#model-details" replace />} />
           <Route path="/project" element={<ProjectPage />} />
           <Route path="/estimate" element={<EstimatePage />} />
           <Route path="/optimize" element={<OptimizePage />} />

@@ -27,6 +27,25 @@ async def test_get_active_models():
     mock_db.models.find.assert_called_once_with({"active": True})
 
 @pytest.mark.asyncio
+async def test_get_all_models():
+    mock_db = MagicMock()
+    mock_cursor = MagicMock()
+    
+    mock_models_list = [
+        {"model_id": "gpt-4o", "provider": "openai", "active": True, "display_name": "GPT-4o"},
+        {"model_id": "old-model", "provider": "openai", "active": False, "display_name": "Old Model"}
+    ]
+    
+    mock_cursor.to_list = AsyncMock(return_value=mock_models_list)
+    mock_db.models.find.return_value = mock_cursor
+    
+    repo = CatalogRepository(db=mock_db)
+    all_models = await repo.get_all_models()
+    
+    assert len(all_models) == 2
+    mock_db.models.find.assert_called_once_with()
+
+@pytest.mark.asyncio
 async def test_update_model_pricing():
     mock_db = MagicMock()
     

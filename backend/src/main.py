@@ -67,14 +67,15 @@ app.include_router(admin_router)
     response_model=List[ModelOut],
     tags=["catalog"]
 )
-async def get_active_models():
+async def get_active_models(include_inactive: bool = False):
     """
     Public, read-only active model catalog used by the regular Dashboard.
     No administrative operations are exposed through this endpoint.
+    If include_inactive=True, returns all models in the catalog.
     """
     repo = CatalogRepository()
     try:
-        models = await repo.get_active_models()
+        models = await repo.get_all_models() if include_inactive else await repo.get_active_models()
         return models
     except PyMongoError as e:
         logger.error(f"Database error during active models fetch: {str(e)}")

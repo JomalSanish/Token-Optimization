@@ -282,22 +282,24 @@ export default function EstimatePage() {
                 <tr key={phase.id}>
                   <td>
                     <input 
-                      className={styles.input}
+                      className={`${styles.input} ${styles.phaseInput}`}
                       value={phase.phase}
+                      placeholder="Phase ID"
                       onChange={e => handlePhaseChange(phase.id, 'phase', e.target.value)}
                     />
                   </td>
                   <td>
                     <input 
-                      className={styles.input}
+                      className={`${styles.input} ${styles.roleInput}`}
                       value={phase.agent_role}
+                      placeholder="Agent role"
                       onChange={e => handlePhaseChange(phase.id, 'agent_role', e.target.value)}
                     />
                   </td>
                   <td>
                     <input 
                       type="number"
-                      className={`${styles.input} ${styles.inputNum}`}
+                      className={`${styles.input} ${styles.inputToken}`}
                       value={phase.base_input_tokens}
                       onChange={e => handlePhaseChange(phase.id, 'base_input_tokens', e.target.value)}
                     />
@@ -305,7 +307,7 @@ export default function EstimatePage() {
                   <td>
                     <input 
                       type="number"
-                      className={`${styles.input} ${styles.inputNum}`}
+                      className={`${styles.input} ${styles.inputToken}`}
                       value={phase.context_input_tokens}
                       onChange={e => handlePhaseChange(phase.id, 'context_input_tokens', e.target.value)}
                     />
@@ -324,7 +326,7 @@ export default function EstimatePage() {
                   <td>
                     <input 
                       type="number"
-                      className={`${styles.input} ${styles.inputNum}`}
+                      className={`${styles.input} ${styles.inputToken}`}
                       value={phase.tool_call_tokens}
                       onChange={e => handlePhaseChange(phase.id, 'tool_call_tokens', e.target.value)}
                     />
@@ -332,7 +334,7 @@ export default function EstimatePage() {
                   <td>
                     <input 
                       type="number"
-                      className={`${styles.input} ${styles.inputNum}`}
+                      className={`${styles.input} ${styles.inputToken}`}
                       value={phase.output_tokens}
                       onChange={e => handlePhaseChange(phase.id, 'output_tokens', e.target.value)}
                     />

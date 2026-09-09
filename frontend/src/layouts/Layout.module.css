@@ -10,6 +10,7 @@
 
 .sidebar {
   width: 260px;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);

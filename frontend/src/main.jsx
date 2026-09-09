@@ -41,6 +41,7 @@ createRoot(document.getElementById('root')).render(
         </Route>
 
         {/* Admin Routes */}
+        <Route path="/admin" element={<Navigate to="/admin/providers" replace />} />
         <Route element={<AdminLayout />}>
           <Route path="/admin/providers" element={<ProvidersPage />} />
           <Route path="/admin/models" element={<ModelsPage />} />

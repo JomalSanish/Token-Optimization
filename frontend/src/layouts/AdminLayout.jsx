@@ -51,6 +51,15 @@ export default function AdminLayout() {
             Phases
           </NavLink>
         </nav>
+        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+          <NavLink
+            to="/keys"
+            className={styles.navLink}
+            style={{ fontSize: '13px', opacity: 0.8 }}
+          >
+            ← Back to App
+          </NavLink>
+        </div>
       </aside>
       <main className={styles.mainContent}>
         <Outlet />

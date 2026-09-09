@@ -22,6 +22,7 @@ export async function apiFetch(path, options = {}) {
   // We apply it everywhere; admin endpoints will ignore it and look for Bearer.
   if (APP_SECRET) {
     headers.set('X-App-Secret', APP_SECRET);
+    headers.set('X-Shared-Secret', APP_SECRET);
   }
 
   const response = await fetch(url, {

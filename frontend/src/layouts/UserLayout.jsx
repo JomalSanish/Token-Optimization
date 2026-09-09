@@ -51,6 +51,15 @@ export default function UserLayout() {
             Discover
           </NavLink>
         </nav>
+        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+          <NavLink
+            to="/admin"
+            className={styles.navLink}
+            style={{ fontSize: '13px', opacity: 0.8 }}
+          >
+            ⚙️ Admin Portal
+          </NavLink>
+        </div>
       </aside>
       <main className={styles.mainContent}>
         <Outlet />

@@ -48,7 +48,9 @@ export default function KeysPage() {
   };
 
   const handleAddKey = (providerId) => {
-    const { key, label } = forms[providerId];
+    const form = forms[providerId] || {};
+    const key = form.key || '';
+    const label = form.label || '';
     if (!key.trim()) return;
 
     addKey(providerId, key.trim(), label.trim());
@@ -115,14 +117,14 @@ export default function KeysPage() {
                   type="text"
                   placeholder="API Key (e.g. sk-...)"
                   className={styles.input}
-                  value={form.key}
+                  value={form.key || ''}
                   onChange={(e) => handleInputChange(provider.provider_id, 'key', e.target.value)}
                 />
                 <input
                   type="text"
                   placeholder="Label (optional)"
                   className={`${styles.input} ${styles.labelInput}`}
-                  value={form.label}
+                  value={form.label || ''}
                   onChange={(e) => handleInputChange(provider.provider_id, 'label', e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleAddKey(provider.provider_id);
@@ -131,7 +133,7 @@ export default function KeysPage() {
                 <button 
                   className={styles.btnPrimary}
                   onClick={() => handleAddKey(provider.provider_id)}
-                  disabled={!form.key.trim()}
+                  disabled={!form.key || !form.key.trim()}
                 >
                   Add
                 </button>

@@ -74,7 +74,9 @@ export default function DiscoverPage() {
         pricing_snapshot: estimateResult.pricing_snapshot,
         estimate_result: estimateResult,
         optimize_result: optimizeResult,
-        active_rules: activeRules
+        active_rules: activeRules,
+        provider: context.provider,
+        model_id: context.model_id
       };
 
       const response = await apiFetch('/discover-optimizations', {
@@ -128,6 +130,20 @@ export default function DiscoverPage() {
           <div className={styles.cardHeader}>
             <h3>AI-Assisted Feature Discovery</h3>
             <p>Using the context from your initial project description, the AI will search for advanced architectural patterns.</p>
+          </div>
+
+          <div style={{ margin: '16px 0', padding: '12px 16px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontSize: '13px', color: 'var(--text)' }}>Active Context: </span>
+              <strong style={{ fontSize: '14px', color: 'var(--text-h)' }}>{context.provider} / {context.model_id}</strong>
+            </div>
+            <button 
+              type="button"
+              onClick={() => navigate('/project')} 
+              style={{ background: 'none', border: 'none', color: 'var(--accent, #6366f1)', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}
+            >
+              Change in Project
+            </button>
           </div>
 
           <button

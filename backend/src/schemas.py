@@ -573,6 +573,8 @@ class DiscoverRequest(BaseModel):
     estimate_result: EstimateResponse
     optimize_result: OptimizeResponse
     active_rules: List[Dict[str, Any]]
+    provider: Optional[str] = None
+    model_id: Optional[str] = None
     
     model_config = common_config
 

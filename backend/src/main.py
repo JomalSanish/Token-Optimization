@@ -728,29 +728,34 @@ async def discover_custom_optimizations(
         f"Compounded savings achieved: {payload.optimize_result.total_savings_amount} USD\n"
     )
     
-    # We choose the first model in the snapshot for the advisor run
-    if not payload.pricing_snapshot.models:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Pricing snapshot contains no active models to execute the discovery request."
-        )
-        
-    model = payload.pricing_snapshot.models[0]
+    # Determine provider and model for the advisor run:
+    # Prefer explicit provider and model_id from payload (e.g. from extraction context),
+    # otherwise fall back to matching or first model in pricing_snapshot.
+    target_provider = payload.provider
+    target_model_id = payload.model_id
+
+    if not target_provider or not target_model_id:
+        if not payload.pricing_snapshot.models:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pricing snapshot contains no active models to execute the discovery request."
+            )
+        matched_model = None
+        if target_provider:
+            for m in payload.pricing_snapshot.models:
+                if m.provider == target_provider:
+                    matched_model = m
+                    break
+        if not matched_model:
+            matched_model = payload.pricing_snapshot.models[0]
+            
+        target_provider = target_provider or matched_model.provider
+        target_model_id = target_model_id or matched_model.model_id
 
     try:
-        # T027 follow-up fix: dispatch_llm_call was rewired to take the full
-        # provider_doc (for the native/openai_compatible/template three-way
-        # switch) instead of a bare provider name string. That rewire was
-        # applied to /extract but missed here, which called
-        # dispatch_llm_call(provider=model.provider, ...) — `provider` isn't
-        # even a parameter of the current function (it's `provider_doc`), so
-        # this raised a TypeError on every real request (masked in tests
-        # because the test mocks dispatch_llm_call directly, and a mock
-        # accepts any keyword argument). Fetch the provider document the
-        # same way /extract does.
         repo_inner = CatalogRepository()
         try:
-            provider_doc = await repo_inner.get_provider_by_id(model.provider)
+            provider_doc = await repo_inner.get_provider_by_id(target_provider)
         except PyMongoError as e:
             logger.error(f"Database error during provider lookup for discovery: {str(e)}")
             raise HTTPException(
@@ -760,12 +765,12 @@ async def discover_custom_optimizations(
         if not provider_doc or not provider_doc.get("active", False):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Provider '{model.provider}' not found or inactive."
+                detail=f"Provider '{target_provider}' not found or inactive."
             )
 
         response_text = await dispatch_llm_call(
             provider_doc=provider_doc,
-            model_id=model.model_id,
+            model_id=target_model_id,
             api_key=x_provider_key,
             system_prompt=system_prompt,
             user_prompt=user_prompt
